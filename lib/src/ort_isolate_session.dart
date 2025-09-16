@@ -23,16 +23,27 @@ class OrtIsolateSession {
   }) : address = session.address;
 
   Future<void> _init() async {
+    // Create a receive port for communication with the new isolate
     final rootIsolateReceivePort = ReceivePort();
     final rootIsolateSendPort = rootIsolateReceivePort.sendPort;
+
+    // Spawn the new isolate for running inference
     _newIsolate = await Isolate.spawn(
         createNewIsolateContext, rootIsolateSendPort,
         debugName: debugName);
+
+    // Listen for messages from the new isolate
     _streamSubscription = rootIsolateReceivePort.listen((message) {
+      // Handle initial SendPort message for bidirectional communication
       if (message is SendPort) {
         _newIsolateSendPort = message;
-        _completer.complete();
+        // Only complete the completer if it hasn't been completed yet
+        // This prevents the "Future already completed" error
+        if (!_completer.isCompleted) {
+          _completer.complete();
+        }
       }
+      // Handle inference output results
       if (message is List<MapEntry>) {
         _outputController.add(message);
       }
