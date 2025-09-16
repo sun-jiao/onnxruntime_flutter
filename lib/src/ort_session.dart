@@ -245,11 +245,15 @@ class OrtSession {
   /// 2. ONNX Runtime (C++ library) performs the actual computation in native memory
   /// 3. Results are returned back to the Dart isolate via pointers
   ///
-  /// This means:
-  /// - The actual neural network computation is NOT happening "inside" the Dart isolate
-  /// - The isolate is just orchestrating the calls to native code
-  /// - Multiple isolates can potentially share the same ONNX session (via address)
-  /// - The native ONNX Runtime has its own thread pool independent of Dart
+  /// **THE KEY INSIGHT:**
+  /// - **runAsync()**: 1 isolate → 1 active native call at a time (sequential)
+  /// - **runOnceAsync()**: N isolates → N active native calls (parallel!)
+  ///
+  /// Why? Because each isolate can make ONE synchronous FFI call at a time.
+  /// Multiple isolates = Multiple simultaneous FFI calls = Parallel execution!
+  ///
+  /// The native ONNX Runtime CAN handle multiple concurrent calls (it's thread-safe),
+  /// but a single Dart isolate can only make one blocking FFI call at a time.
   ///
   /// **Threading Layers:**
   /// - **Dart Isolates**: Provide concurrency for Dart code (message passing, orchestration)
@@ -282,6 +286,22 @@ class OrtSession {
   /// // FASTEST for single large model: Configure threads optimally
   /// options.setIntraOpNumThreads(8); // Use all cores for one inference
   /// await session.runAsync(runOptions, largeInput); // Single but fast
+  /// ```
+  ///
+  /// **Visual: Why runOnceAsync() is parallel but runAsync() is not:**
+  /// ```
+  /// runAsync() - Single Isolate:          runOnceAsync() - Multiple Isolates:
+  /// ┌─────────────┐                       ┌─────────────┐ ┌─────────────┐
+  /// │  Isolate 1  │                       │  Isolate 1  │ │  Isolate 2  │
+  /// │   Call 1    │ → ONNX (blocks)       │   Call 1    │ │   Call 2    │
+  /// │   Call 2    │ ← (waiting...)        └──────┬──────┘ └──────┬──────┘
+  /// │   Call 3    │ ← (waiting...)               ↓               ↓
+  /// └─────────────┘                       ┌─────────────────────────────┐
+  ///                                        │     ONNX Runtime (C++)      │
+  /// Result: Sequential execution          │   Processing BOTH calls     │
+  ///                                        │     in parallel!            │
+  ///                                        └─────────────────────────────┘
+  ///                                        Result: Parallel execution
   /// ```
   Future<List<OrtValue?>>? runAsync(
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
