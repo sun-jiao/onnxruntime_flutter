@@ -224,11 +224,39 @@ class OrtSession {
   }
 
   /// Performs inference asynchronously.
+  /// Uses a persistent isolate that stays alive for reuse.
+  /// To kill the isolate, call killIsolate() or release().
   Future<List<OrtValue?>>? runAsync(
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) {
     _isolateSession ??= OrtIsolateSession(this);
     return _isolateSession?.run(runOptions, inputs, outputNames);
+  }
+
+  /// Creates a new isolate for a single inference run.
+  /// The isolate is automatically killed after the inference completes.
+  /// Useful for one-off async inference without keeping isolates alive.
+  Future<List<OrtValue?>> runOnceAsync(
+      OrtRunOptions runOptions, Map<String, OrtValue> inputs,
+      [List<String>? outputNames]) async {
+    final isolateSession = OrtIsolateSession(this);
+    try {
+      final result = await isolateSession.run(runOptions, inputs, outputNames);
+      return result;
+    } finally {
+      // Always clean up the isolate after use
+      await isolateSession.release();
+    }
+  }
+
+  /// Kills the persistent async isolate while keeping the session alive.
+  /// The session can still be used for new inference runs after calling this.
+  /// Next runAsync() will create a new isolate.
+  Future<void> killIsolate() async {
+    if (_isolateSession != null) {
+      await _isolateSession!.release();
+      _isolateSession = null;
+    }
   }
 
   String getMetadatas(String key) {
@@ -259,9 +287,11 @@ class OrtSession {
     return name;
   }
 
-  void release() {
-    _isolateSession?.release();
+  Future<void> release() async {
+    // Release isolate if exists
+    await _isolateSession?.release();
     _isolateSession = null;
+    // Release the native session
     OrtEnv.instance.ortApiPtr.ref.ReleaseSession
         .asFunction<void Function(ffi.Pointer<bg.OrtSession>)>()(_ptr);
   }
