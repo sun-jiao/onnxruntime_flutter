@@ -320,6 +320,17 @@ class OrtSessionOptions {
     OrtStatus.checkOrtStatus(statusPtr);
   }
 
+  /// Sets the execution mode for the session.
+  /// Sequential mode runs operations one at a time.
+  /// Parallel mode allows operations to run in parallel when possible.
+  void setSessionExecutionMode(OrtSessionExecutionMode mode) {
+    final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetSessionExecutionMode
+        .asFunction<
+            bg.OrtStatusPtr Function(
+                ffi.Pointer<bg.OrtSessionOptions>, int)>()(_ptr, mode.value);
+    OrtStatus.checkOrtStatus(statusPtr);
+  }
+
   bool _appendExecutionProvider(OrtProvider provider, OrtFlags flags) {
     var result = false;
     bg.OrtStatusPtr? statusPtr;
@@ -529,4 +540,19 @@ enum GraphOptimizationLevel {
   final int value;
 
   const GraphOptimizationLevel(this.value);
+}
+
+/// Enum for OrtSessionGraphOptimizationLevel - alias for GraphOptimizationLevel
+/// Provides compatibility with naming used in some examples
+typedef OrtSessionGraphOptimizationLevel = GraphOptimizationLevel;
+
+/// Enum for session execution modes
+enum OrtSessionExecutionMode {
+  /// Run the graph in sequential mode - operations will run one at a time
+  ortSequential(bg.ExecutionMode.ORT_SEQUENTIAL),
+  /// Run the graph in parallel mode - operations may run in parallel
+  ortParallel(bg.ExecutionMode.ORT_PARALLEL);
+
+  final int value;
+  const OrtSessionExecutionMode(this.value);
 }
