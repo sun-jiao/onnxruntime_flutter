@@ -71,7 +71,7 @@ class OrtIsolateSession {
   OrtIsolateSession(
     OrtSession session, {
     this.debugName = 'OnnxRuntimeSessionIsolate',
-    this.timeout = const Duration(seconds: 5), // Default 5 second timeout
+    this.timeout = const Duration(seconds: 60), // Default 60 second timeout
     this.allowQueueing = false, // Default: reject concurrent calls
   }) : address = session.address;
 
