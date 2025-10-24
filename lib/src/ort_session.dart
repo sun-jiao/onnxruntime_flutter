@@ -788,7 +788,7 @@ class OrtSessionOptions {
   /// **Priority order:**
   /// 1. **GPU**: CUDA/TensorRT (NVIDIA) > DirectML (Windows) > ROCm (AMD)
   /// 2. **NPU/Accelerators**: CoreML (Apple) > NNAPI (Android) > QNN (Qualcomm)
-  /// 3. **Optimized CPU**: DNNL (Intel) > XNNPACK (cross-platform)
+/// 3. **Optimized CPU**: DNNL (Intel) > XNNPACK (cross-platform)
   /// 4. **Fallback**: Standard CPU
   /// 
   /// This method tries providers in order and uses the first one that succeeds.
@@ -797,45 +797,15 @@ class OrtSessionOptions {
   /// **Usage:**
   /// ```dart
   /// final options = OrtSessionOptions();
-  /// options.appendDefaultProviders(); // Auto-selects best available
+  /// await options.appendDefaultProviders(); // Auto-selects best available
   /// final session = OrtSession.fromBuffer(modelBytes, options);
   /// ```
-  void appendDefaultProviders() {
+  /// 
+  /// **Note:** This method runs asynchronously to avoid blocking the UI thread
+  /// during device capability detection. Make sure to await it before creating
+  /// your session!
+  Future<void> appendDefaultProviders() async {
     var hasProvider = false;
-
-    // Try GPU providers first (best performance for most models)
-    // CUDA/TensorRT for NVIDIA
-    if (!hasProvider) {
-      try {
-        if (appendCudaProvider(CUDAFlags.useArena)) {
-          hasProvider = true;
-        }
-      } catch (e) {
-        // CUDA not available, continue
-      }
-    }
-
-    // DirectML for Windows (AMD/Intel/NVIDIA)
-    if (!hasProvider) {
-      try {
-        if (appendDirectMLProvider()) {
-          hasProvider = true;
-        }
-      } catch (e) {
-        // DirectML not available, continue
-      }
-    }
-
-    // ROCm for AMD GPUs on Linux
-    if (!hasProvider) {
-      try {
-        if (appendRocmProvider(ROCmFlags.useArena)) {
-          hasProvider = true;
-        }
-      } catch (e) {
-        // ROCm not available, continue
-      }
-    }
 
     // Try mobile/NPU accelerators
     // CoreML for Apple devices (Neural Engine)
@@ -868,6 +838,40 @@ class OrtSessionOptions {
         }
       } catch (e) {
         // QNN not available, continue
+      }
+    }
+
+    // Try GPU providers first (best performance for most models)
+    // CUDA/TensorRT for NVIDIA
+    if (!hasProvider) {
+      try {
+        if (appendCudaProvider(CUDAFlags.useArena)) {
+          hasProvider = true;
+        }
+      } catch (e) {
+        // CUDA not available, continue
+      }
+    }
+
+    // DirectML for Windows (AMD/Intel/NVIDIA)
+    if (!hasProvider) {
+      try {
+        if (appendDirectMLProvider()) {
+          hasProvider = true;
+        }
+      } catch (e) {
+        // DirectML not available, continue
+      }
+    }
+
+    // ROCm for AMD GPUs on Linux
+    if (!hasProvider) {
+      try {
+        if (appendRocmProvider(ROCmFlags.useArena)) {
+          hasProvider = true;
+        }
+      } catch (e) {
+        // ROCm not available, continue
       }
     }
 
