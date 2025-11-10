@@ -1,26 +1,16 @@
+plugins {
+    id 'com.android.library'
+}
+
 group 'com.gtbluesky.onnxruntime'
 version '1.0'
 
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        // The Android Gradle Plugin knows how to build native code with the NDK.
-        classpath 'com.android.tools.build:gradle:7.3.0'
-    }
+repositories {
 }
 
-apply plugin: 'com.android.library'
-
 android {
-    if (project.android.hasProperty("namespace")) {
-        namespace 'com.gtbluesky.onnxruntime'
-    }
-
-    compileSdkVersion 33
+    namespace 'com.gtbluesky.onnxruntime'
+    compileSdk 36
 
     ndkVersion android.ndkVersion
 
@@ -30,11 +20,11 @@ android {
     }
 
     defaultConfig {
-        minSdkVersion 21
+        minSdk 21
     }
 }
 
 dependencies {
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.20.0'
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2'
 }
 
