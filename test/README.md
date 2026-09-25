@@ -38,3 +38,10 @@ release of native wrappers. `OrtSession.release()` retains its `void` signature;
 native destruction is deferred until accepted runs finish and the worker exits.
 Inputs and run options must remain alive until their pending inference futures
 complete, as with any asynchronous inference call.
+
+File-session tests check UTF-16 (Windows) and UTF-8 (other platforms), including
+terminators and surrogate pairs, on every host. They also load and run models in
+paths containing spaces, Chinese characters, and emoji using the host's native
+runtime, and verify missing files still throw. Run the suite on Windows to verify
+the Windows DLL integration in addition to the platform-independent encoding
+checks.

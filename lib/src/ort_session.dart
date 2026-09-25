@@ -13,6 +13,7 @@ import 'package:onnxruntime/src/ort_status.dart';
 import 'package:onnxruntime/src/ort_value.dart';
 import 'package:onnxruntime/src/ort_provider.dart';
 import 'package:onnxruntime/src/providers/ort_flags.dart';
+import 'package:onnxruntime/src/util/native_path.dart';
 
 class OrtSession {
   bool _released = false;
@@ -32,17 +33,20 @@ class OrtSession {
 
   /// Creates a session from a file.
   OrtSession.fromFile(File modelFile, OrtSessionOptions options) {
-    final pp = calloc<ffi.Pointer<bg.OrtSession>>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSession.asFunction<
-            bg.OrtStatusPtr Function(
-                ffi.Pointer<bg.OrtEnv>,
-                ffi.Pointer<ffi.Char>,
-                ffi.Pointer<bg.OrtSessionOptions>,
-                ffi.Pointer<ffi.Pointer<bg.OrtSession>>)>()(OrtEnv.instance.ptr,
-        modelFile.path.toNativeUtf8().cast<ffi.Char>(), options._ptr, pp);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _ptr = pp.value;
-    calloc.free(pp);
+    using((arena) {
+      final pp = arena<ffi.Pointer<bg.OrtSession>>();
+      final path = allocateOrtPath(modelFile.path,
+          isWindows: Platform.isWindows, allocator: arena);
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSession.asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<bg.OrtEnv>,
+                  ffi.Pointer<ffi.Char>,
+                  ffi.Pointer<bg.OrtSessionOptions>,
+                  ffi.Pointer<ffi.Pointer<bg.OrtSession>>)>()(
+          OrtEnv.instance.ptr, path, options._ptr, pp);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _ptr = pp.value;
+    });
     _init();
   }
 
