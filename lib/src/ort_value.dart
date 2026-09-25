@@ -9,6 +9,7 @@ import 'package:onnxruntime/src/ort_status.dart';
 import 'package:onnxruntime/src/util/list_shape_extension.dart';
 
 abstract class OrtValue {
+  bool _released = false;
   late ffi.Pointer<bg.OrtValue> _ptr;
 
   ffi.Pointer<bg.OrtValue> get ptr => _ptr;
@@ -207,6 +208,10 @@ abstract class OrtValue {
   }
 
   void release() {
+    if (_released) {
+      return;
+    }
+    _released = true;
     _releaseOrtValue(_ptr);
   }
 }

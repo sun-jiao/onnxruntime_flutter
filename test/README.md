@@ -31,3 +31,10 @@ requests after an error, mixed successful/failing concurrent requests, and abrup
 worker exit. Failed asynchronous calls retain the existing empty-list result.
 Test-only five-second timeouts detect unresolved futures; no timeout is added to
 the library API.
+
+Lifecycle regressions cover release before initialization, release during
+initialization, a gated busy worker, release after a failed request, and repeated
+release of native wrappers. `OrtSession.release()` retains its `void` signature;
+native destruction is deferred until accepted runs finish and the worker exits.
+Inputs and run options must remain alive until their pending inference futures
+complete, as with any asynchronous inference call.

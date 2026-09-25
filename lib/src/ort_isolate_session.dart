@@ -7,9 +7,9 @@ import 'package:onnxruntime/src/ort_value.dart';
 class OrtIsolateSession {
   int address;
   final String debugName;
-  late Isolate _newIsolate;
+  Isolate? _newIsolate;
   late SendPort _newIsolateSendPort;
-  late StreamSubscription _streamSubscription;
+  StreamSubscription? _streamSubscription;
   final _outputController = StreamController<_IsolateSessionResult>.broadcast();
 
   IsolateSessionState get state => _state;
@@ -19,6 +19,11 @@ class OrtIsolateSession {
   Future<void>? _initialization;
   var _nextRequestId = 0;
   final _completer = Completer();
+  final _workerExited = Completer<void>();
+  var _released = false;
+  var _activeRuns = 0;
+  Completer<void>? _drained;
+  Future<void>? _releaseFuture;
 
   OrtIsolateSession(
     OrtSession session, {
@@ -40,6 +45,9 @@ class OrtIsolateSession {
       }
       if (message is _IsolateSessionResult) {
         _outputController.add(message);
+      }
+      if (message == null) {
+        _workerExited.complete();
       }
       if (message == null || message is List) {
         _handleWorkerStopped();
@@ -66,7 +74,12 @@ class OrtIsolateSession {
     final newIsolateReceivePort = ReceivePort();
     final newIsolateSendPort = newIsolateReceivePort.sendPort;
     rootIsolateSendPort.send(newIsolateSendPort);
-    await for (final _IsolateSessionData data in newIsolateReceivePort) {
+    await for (final message in newIsolateReceivePort) {
+      if (message == null) {
+        newIsolateReceivePort.close();
+        break;
+      }
+      final data = message as _IsolateSessionData;
       try {
         final session = OrtSession.fromAddress(data.session);
         final runOptions = OrtRunOptions.fromAddress(data.runOptions);
@@ -100,6 +113,10 @@ class OrtIsolateSession {
   Future<List<OrtValue?>> run(
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) async {
+    if (_released) {
+      return [];
+    }
+    ++_activeRuns;
     try {
       // Concurrent first calls must share the same worker and handshake.
       if (!_initialized && !_workerStopped) {
@@ -147,13 +164,33 @@ class OrtIsolateSession {
       }
       _state = IsolateSessionState.idle;
       return [];
+    } finally {
+      if (--_activeRuns == 0) {
+        _drained?.complete();
+      }
     }
   }
 
-  Future<void> release() async {
-    await _streamSubscription.cancel();
+  Future<void> release() {
+    _released = true;
+    return _releaseFuture ??= _release();
+  }
+
+  Future<void> _release() async {
+    // Accepted calls include those still waiting for the initial handshake.
+    if (_activeRuns != 0) {
+      _drained = Completer<void>();
+      await _drained!.future;
+    }
+    if (_newIsolate != null) {
+      if (!_workerStopped) {
+        _newIsolateSendPort.send(null);
+      }
+      // A stop request (or an error notification) is not proof of exit.
+      await _workerExited.future;
+    }
+    await _streamSubscription?.cancel();
     await _outputController.close();
-    _newIsolate.kill();
   }
 }
 

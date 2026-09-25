@@ -167,6 +167,7 @@ enum OrtLoggingLevel {
 
 /// A class obout thread's options.
 class OrtThreadingOptions {
+  bool _released = false;
   late ffi.Pointer<bg.OrtThreadingOptions> _ptr;
 
   OrtThreadingOptions() {
@@ -185,6 +186,10 @@ class OrtThreadingOptions {
   }
 
   void release() {
+    if (_released) {
+      return;
+    }
+    _released = true;
     OrtEnv.instance.ortApiPtr.ref.ReleaseThreadingOptions
         .asFunction<void Function(ffi.Pointer<bg.OrtThreadingOptions>)>()(_ptr);
   }

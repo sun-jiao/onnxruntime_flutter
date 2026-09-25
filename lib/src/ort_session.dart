@@ -15,6 +15,7 @@ import 'package:onnxruntime/src/ort_provider.dart';
 import 'package:onnxruntime/src/providers/ort_flags.dart';
 
 class OrtSession {
+  bool _released = false;
   late ffi.Pointer<bg.OrtSession> _ptr;
   late int _inputCount;
   late List<String> _inputNames;
@@ -157,6 +158,9 @@ class OrtSession {
   /// Performs inference synchronously.
   List<OrtValue?> run(OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) {
+    if (_released) {
+      throw StateError('The session has been released.');
+    }
     final inputLength = inputs.length;
     final inputNamePtrs = calloc<ffi.Pointer<ffi.Char>>(inputLength);
     final inputPtrs = calloc<ffi.Pointer<bg.OrtValue>>(inputLength);
@@ -228,11 +232,17 @@ class OrtSession {
   Future<List<OrtValue?>>? runAsync(
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) {
+    if (_released) {
+      return Future.value(<OrtValue?>[]);
+    }
     _isolateSession ??= OrtIsolateSession(this);
     return _isolateSession?.run(runOptions, inputs, outputNames);
   }
 
   String getMetadatas(String key) {
+    if (_released) {
+      throw StateError('The session has been released.');
+    }
     final metaPtr = calloc<ffi.Pointer<bg.OrtModelMetadata>>();
     var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetModelMetadata
             .asFunction<
@@ -260,15 +270,31 @@ class OrtSession {
     return name;
   }
 
+  /// Stops accepting runs and releases this session once any worker has exited.
+  /// Already accepted asynchronous runs complete before native destruction.
   void release() {
-    _isolateSession?.release();
+    if (_released) {
+      return;
+    }
+    _released = true;
+    final isolateSession = _isolateSession;
     _isolateSession = null;
+    if (isolateSession == null) {
+      _releaseNative();
+    } else {
+      // Keep the void API while deferring destruction until the worker exits.
+      isolateSession.release().then((_) => _releaseNative());
+    }
+  }
+
+  void _releaseNative() {
     OrtEnv.instance.ortApiPtr.ref.ReleaseSession
         .asFunction<void Function(ffi.Pointer<bg.OrtSession>)>()(_ptr);
   }
 }
 
 class OrtSessionOptions {
+  bool _released = false;
   late ffi.Pointer<bg.OrtSessionOptions> _ptr;
   int _intraOpNumThreads = 0;
 
@@ -288,6 +314,10 @@ class OrtSessionOptions {
   }
 
   void release() {
+    if (_released) {
+      return;
+    }
+    _released = true;
     OrtEnv.instance.ortApiPtr.ref.ReleaseSessionOptions
         .asFunction<void Function(ffi.Pointer<bg.OrtSessionOptions>)>()(_ptr);
   }
@@ -414,6 +444,7 @@ class OrtSessionOptions {
 }
 
 class OrtRunOptions {
+  bool _released = false;
   late ffi.Pointer<bg.OrtRunOptions> _ptr;
 
   int get address => _ptr.address;
@@ -437,6 +468,10 @@ class OrtRunOptions {
   }
 
   void release() {
+    if (_released) {
+      return;
+    }
+    _released = true;
     OrtEnv.instance.ortApiPtr.ref.ReleaseRunOptions
         .asFunction<void Function(ffi.Pointer<bg.OrtRunOptions> input)>()(_ptr);
   }
