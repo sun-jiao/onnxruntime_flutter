@@ -10,11 +10,13 @@ class OrtIsolateSession {
   late Isolate _newIsolate;
   late SendPort _newIsolateSendPort;
   late StreamSubscription _streamSubscription;
-  final _outputController = StreamController<List<MapEntry>>.broadcast();
+  final _outputController = StreamController<_IsolateSessionResult>.broadcast();
 
   IsolateSessionState get state => _state;
   var _state = IsolateSessionState.idle;
   var _initialized = false;
+  Future<void>? _initialization;
+  var _nextRequestId = 0;
   final _completer = Completer();
 
   OrtIsolateSession(
@@ -33,10 +35,11 @@ class OrtIsolateSession {
         _newIsolateSendPort = message;
         _completer.complete();
       }
-      if (message is List<MapEntry>) {
+      if (message is _IsolateSessionResult) {
         _outputController.add(message);
       }
     });
+    await _completer.future;
   }
 
   static Future<void> createNewIsolateContext(
@@ -65,7 +68,7 @@ class OrtIsolateSession {
         }
         return MapEntry(onnxType.value, e?.address);
       }).toList();
-      rootIsolateSendPort.send(outputs);
+      rootIsolateSendPort.send(_IsolateSessionResult(data.requestId, outputs));
     }
   }
 
@@ -73,24 +76,27 @@ class OrtIsolateSession {
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) async {
     try {
-      
-    if (!_initialized) {
-      await _init();
-      await _completer.future;
-      _initialized = true;
-    }
-    final transformedInputs =
-        inputs.map((key, value) => MapEntry(key, value.address));
-    _state = IsolateSessionState.loading;
-    final data = _IsolateSessionData(
-        session: address,
-        runOptions: runOptions.address,
-        inputs: transformedInputs,
-        outputNames: outputNames);
-    _newIsolateSendPort.send(data);
-    late List<OrtValue?> outputs;
-    await for (final result in _outputController.stream) {
-      outputs = result.map((e) {
+      // Concurrent first calls must share the same worker and handshake.
+      if (!_initialized) {
+        await (_initialization ??= _init());
+        _initialized = true;
+      }
+      final transformedInputs =
+          inputs.map((key, value) => MapEntry(key, value.address));
+      _state = IsolateSessionState.loading;
+      final requestId = _nextRequestId++;
+      final data = _IsolateSessionData(
+          requestId: requestId,
+          session: address,
+          runOptions: runOptions.address,
+          inputs: transformedInputs,
+          outputNames: outputNames);
+      // Register before sending, and consume only this request's output handles.
+      final response = _outputController.stream
+          .firstWhere((result) => result.requestId == requestId);
+      _newIsolateSendPort.send(data);
+      final result = await response;
+      final outputs = result.outputs.map((e) {
         final onnxType = ONNXType.valueOf(e.key);
         switch (onnxType) {
           case ONNXType.tensor:
@@ -106,11 +112,11 @@ class OrtIsolateSession {
         }
       }).toList();
       _state = IsolateSessionState.idle;
-      break;
-    }
-    _state = IsolateSessionState.idle;
-    return outputs;
+      return outputs;
     } catch (e) {
+      if (!_initialized) {
+        _initialization = null;
+      }
       _state = IsolateSessionState.idle;
       return [];
     }
@@ -130,13 +136,22 @@ enum IsolateSessionState {
 
 class _IsolateSessionData {
   _IsolateSessionData(
-      {required this.session,
+      {required this.requestId,
+      required this.session,
       required this.runOptions,
       required this.inputs,
       this.outputNames});
 
+  final int requestId;
   final int session;
   final int runOptions;
   final Map<String, int> inputs;
   final List<String>? outputNames;
+}
+
+class _IsolateSessionResult {
+  _IsolateSessionResult(this.requestId, this.outputs);
+
+  final int requestId;
+  final List<MapEntry> outputs;
 }
