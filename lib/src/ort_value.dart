@@ -7,6 +7,7 @@ import 'package:onnxruntime/src/bindings/onnxruntime_bindings_generated.dart'
 import 'package:onnxruntime/src/ort_env.dart';
 import 'package:onnxruntime/src/ort_status.dart';
 import 'package:onnxruntime/src/util/list_shape_extension.dart';
+import 'package:onnxruntime/src/util/native_memory.dart';
 
 abstract class OrtValue {
   bool _released = false;
@@ -20,18 +21,19 @@ abstract class OrtValue {
 
   Map<OrtTensorTypeAndShapeInfo, OrtTensorTypeAndShapeInfo> _createMapInfo(
       ffi.Pointer<bg.OrtValue> ortValuePtr) {
-    final keyPtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    final keyPtr = _getOrtValue(ortValuePtr, 0, keyPtrPtr);
-    final keyInfo = OrtTensorTypeAndShapeInfo(keyPtr);
-    _releaseOrtValue(keyPtr);
-    calloc.free(keyPtrPtr);
+    return usingNative((arena) {
+      final keyPtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      final keyPtr = _getOrtValue(ortValuePtr, 0, keyPtrPtr);
+      arena.using(keyPtr, _releaseOrtValue);
+      final keyInfo = OrtTensorTypeAndShapeInfo(keyPtr);
 
-    final valuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    final valuePtr = _getOrtValue(ortValuePtr, 1, valuePtrPtr);
-    final valueInfo = OrtTensorTypeAndShapeInfo(valuePtr);
-    _releaseOrtValue(valuePtr);
-    calloc.free(valuePtrPtr);
-    return {keyInfo: valueInfo};
+      final valuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      final valuePtr = _getOrtValue(ortValuePtr, 1, valuePtrPtr);
+      arena.using(valuePtr, _releaseOrtValue);
+      final valueInfo = OrtTensorTypeAndShapeInfo(valuePtr);
+
+      return {keyInfo: valueInfo};
+    });
   }
 
   ffi.Pointer<bg.OrtValue> _getOrtValue(ffi.Pointer<bg.OrtValue> ortValuePtr,
@@ -60,146 +62,140 @@ abstract class OrtValue {
   }
 
   List<String> _getStringList(ffi.Pointer<bg.OrtValue> ortValuePtr) {
-    final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
-    final tensorShapeElementCount = info._tensorShapeElementCount;
-    final dataLengthPtr = calloc<ffi.Size>();
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorDataLength
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-                ffi.Pointer<ffi.Size>)>()(ortValuePtr, dataLengthPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final dataLength = dataLengthPtr.value;
-    calloc.free(dataLengthPtr);
-    // last index is '\0'
-    final dataPtr = calloc<ffi.Char>(dataLength + 1);
-    // last index is dataLength
-    final offsetPtr = calloc<ffi.Size>(tensorShapeElementCount + 1);
-    statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorContent.asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-                ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Size>, int)>()(
-        ortValuePtr,
-        dataPtr.cast(),
-        dataLength,
-        offsetPtr,
-        tensorShapeElementCount);
-    OrtStatus.checkOrtStatus(statusPtr);
-    statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorDataLength
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtValue>, ffi.Pointer<ffi.Size>)>()(
-        ortValuePtr,
-        ffi.Pointer.fromAddress(offsetPtr.address +
-            tensorShapeElementCount * ffi.sizeOf<ffi.Size>()));
-    OrtStatus.checkOrtStatus(statusPtr);
-    final list = <String>[];
-    for (int i = 0; i < tensorShapeElementCount; ++i) {
-      final size = offsetPtr[i + 1] - offsetPtr[i];
-      final strPtr = calloc<ffi.Char>(size + 1);
-      for (int j = 0; j < size; ++j) {
-        strPtr[j] = dataPtr[offsetPtr[i] + j];
+    return usingNative((arena) {
+      final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
+      final tensorShapeElementCount = info._tensorShapeElementCount;
+      final dataLengthPtr = arena<ffi.Size>();
+      var statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorDataLength
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+                  ffi.Pointer<ffi.Size>)>()(ortValuePtr, dataLengthPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final dataLength = dataLengthPtr.value;
+
+      // last index is '\0'
+      final dataPtr = arena<ffi.Char>(dataLength + 1);
+      // last index is dataLength
+      final offsetPtr = arena<ffi.Size>(tensorShapeElementCount + 1);
+      statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorContent
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtValue>,
+                      ffi.Pointer<ffi.Void>,
+                      int,
+                      ffi.Pointer<ffi.Size>,
+                      int)>()(ortValuePtr, dataPtr.cast(), dataLength,
+          offsetPtr, tensorShapeElementCount);
+      OrtStatus.checkOrtStatus(statusPtr);
+      statusPtr = OrtEnv.instance.ortApiPtr.ref.GetStringTensorDataLength
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtValue>, ffi.Pointer<ffi.Size>)>()(
+          ortValuePtr,
+          ffi.Pointer.fromAddress(offsetPtr.address +
+              tensorShapeElementCount * ffi.sizeOf<ffi.Size>()));
+      OrtStatus.checkOrtStatus(statusPtr);
+      final list = <String>[];
+      for (int i = 0; i < tensorShapeElementCount; ++i) {
+        final size = offsetPtr[i + 1] - offsetPtr[i];
+        final strPtr = arena<ffi.Char>(size + 1);
+        for (int j = 0; j < size; ++j) {
+          strPtr[j] = dataPtr[offsetPtr[i] + j];
+        }
+        final str = strPtr.cast<Utf8>().toDartString();
+        list.add(str);
       }
-      final str = strPtr.cast<Utf8>().toDartString();
-      list.add(str);
-      calloc.free(strPtr);
-    }
-    calloc.free(dataPtr);
-    calloc.free(offsetPtr);
-    return list;
+
+      return list;
+    });
   }
 
   List<num> _getNumList(ffi.Pointer<bg.OrtValue> ortValuePtr) {
-    final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
-    final tensorElementType = info._tensorElementType;
-    final tensorShapeElementCount = info._tensorShapeElementCount;
-    final data = <num>[];
-    if (tensorElementType == ONNXTensorElementDataType.uint8) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Uint8>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
+    return usingNative((arena) {
+      final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
+      final tensorElementType = info._tensorElementType;
+      final tensorShapeElementCount = info._tensorShapeElementCount;
+      final data = <num>[];
+      if (tensorElementType == ONNXTensorElementDataType.uint8) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Uint8>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.int8) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Int8>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.uint16) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Uint16>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.int16) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Int16>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.uint32) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Uint32>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.int32) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Int32>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.uint64) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Uint64>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.int64) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Int64>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.float) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Float>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
+      } else if (tensorElementType == ONNXTensorElementDataType.double) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Double>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
       }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.int8) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Int8>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.uint16) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Uint16>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.int16) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Int16>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.uint32) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Uint32>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.int32) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Int32>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.uint64) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Uint64>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.int64) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Int64>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.float) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Float>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    } else if (tensorElementType == ONNXTensorElementDataType.double) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Double>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
-      }
-      calloc.free(dataPtrPtr);
-    }
-    return data;
+      return data;
+    });
   }
 
   List<bool> _getBoolList(ffi.Pointer<bg.OrtValue> ortValuePtr) {
-    final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
-    final tensorElementType = info._tensorElementType;
-    final tensorShapeElementCount = info._tensorShapeElementCount;
-    final data = <bool>[];
-    if (tensorElementType == ONNXTensorElementDataType.bool) {
-      final dataPtrPtr = calloc<ffi.Pointer<ffi.Bool>>();
-      final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
-      for (int i = 0; i < tensorShapeElementCount; ++i) {
-        data.add(dataPtr[i]);
+    return usingNative((arena) {
+      final info = OrtTensorTypeAndShapeInfo(ortValuePtr);
+      final tensorElementType = info._tensorElementType;
+      final tensorShapeElementCount = info._tensorShapeElementCount;
+      final data = <bool>[];
+      if (tensorElementType == ONNXTensorElementDataType.bool) {
+        final dataPtrPtr = arena<ffi.Pointer<ffi.Bool>>();
+        final dataPtr = _getTensorMutableData(ortValuePtr, dataPtrPtr);
+        for (int i = 0; i < tensorShapeElementCount; ++i) {
+          data.add(dataPtr[i]);
+        }
       }
-      calloc.free(dataPtrPtr);
-    }
-    return data;
+      return data;
+    });
   }
 
   void _releaseOrtValue(ffi.Pointer<bg.OrtValue> ortValuePtr) {
@@ -219,6 +215,7 @@ abstract class OrtValue {
 class OrtValueTensor extends OrtValue {
   late OrtTensorTypeAndShapeInfo _info;
   ffi.Pointer<ffi.Void> _dataPtr = ffi.nullptr;
+  ffi.Allocator _dataAllocator = calloc;
 
   OrtValueTensor(ffi.Pointer<bg.OrtValue> ptr,
       [ffi.Pointer<ffi.Void>? dataPtr]) {
@@ -239,38 +236,49 @@ class OrtValueTensor extends OrtValue {
 
   static OrtValueTensor _createTensorWithStringList(List<String> data,
       [List<int>? shape]) {
-    final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    shape ??= data.shape;
-    final shapeSize = shape.length;
-    final shapePtr = calloc<ffi.Int64>(shapeSize);
-    shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, shape);
+    return usingNative((arena) {
+      final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      var transferred = false;
+      arena.onReleaseAll(() {
+        if (!transferred && ortValuePtrPtr.value != ffi.nullptr) {
+          OrtEnv.instance.ortApiPtr.ref.ReleaseValue
+                  .asFunction<void Function(ffi.Pointer<bg.OrtValue>)>()(
+              ortValuePtrPtr.value);
+        }
+      });
+      final selectedShape = shape ?? data.shape;
+      final shapeSize = selectedShape.length;
+      final shapePtr = arena<ffi.Int64>(shapeSize);
+      shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, selectedShape);
 
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateTensorAsOrtValue
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtAllocator>,
-                    ffi.Pointer<ffi.Int64> shape,
-                    int,
-                    int,
-                    ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
-        OrtAllocator.instance.ptr,
-        shapePtr,
-        shapeSize,
-        ONNXTensorElementDataType.string.value,
-        ortValuePtrPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final ortValuePtr = ortValuePtrPtr.value;
-    for (int i = 0; i < data.length; ++i) {
-      final str = data[i].toNativeUtf8().cast<ffi.Char>();
-      statusPtr = OrtEnv.instance.ortApiPtr.ref.FillStringTensorElement
-          .asFunction<
-              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-                  ffi.Pointer<ffi.Char>, int)>()(ortValuePtr, str, i);
+      var statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateTensorAsOrtValue
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtAllocator>,
+                      ffi.Pointer<ffi.Int64> shape,
+                      int,
+                      int,
+                      ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
+          OrtAllocator.instance.ptr,
+          shapePtr,
+          shapeSize,
+          ONNXTensorElementDataType.string.value,
+          ortValuePtrPtr);
       OrtStatus.checkOrtStatus(statusPtr);
-    }
-    calloc.free(ortValuePtrPtr);
-    calloc.free(shapePtr);
-    return OrtValueTensor(ortValuePtr);
+      final ortValuePtr = ortValuePtrPtr.value;
+      for (int i = 0; i < data.length; ++i) {
+        final str = data[i].toNativeUtf8(allocator: arena).cast<ffi.Char>();
+        statusPtr = OrtEnv.instance.ortApiPtr.ref.FillStringTensorElement
+            .asFunction<
+                bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+                    ffi.Pointer<ffi.Char>, int)>()(ortValuePtr, str, i);
+        OrtStatus.checkOrtStatus(statusPtr);
+      }
+
+      final tensor = OrtValueTensor(ortValuePtr);
+      transferred = true;
+      return tensor;
+    });
   }
 
   static OrtValueTensor createTensorWithData(dynamic data) {
@@ -291,150 +299,166 @@ class OrtValueTensor extends OrtValue {
 
   static OrtValueTensor createTensorWithDataList(List data,
       [List<int>? shape]) {
-    shape ??= data.shape;
-    final element = data.element();
-    var dataType = ONNXTensorElementDataType.undefined;
-    ffi.Pointer<ffi.Void> dataPtr = ffi.nullptr;
-    int dataSize = 0;
-    int dataByteCount = 0;
-    if (element is Uint8List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.uint8;
-      dataPtr = (calloc<ffi.Uint8>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize;
-    } else if (element is Int8List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.int8;
-      dataPtr = (calloc<ffi.Int8>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize;
-    } else if (element is Uint16List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.uint16;
-      dataPtr = (calloc<ffi.Uint16>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 2;
-    } else if (element is Int16List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.int16;
-      dataPtr = (calloc<ffi.Int16>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 2;
-    } else if (element is Uint32List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.uint32;
-      dataPtr = (calloc<ffi.Uint32>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 4;
-    } else if (element is Int32List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.int32;
-      dataPtr = (calloc<ffi.Int32>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 4;
-    } else if (element is Uint64List) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.uint64;
-      dataPtr = (calloc<ffi.Uint64>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 8;
-    } else if (element is Int64List || element is int) {
-      final flattenData = data.flatten<int>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.int64;
-      dataPtr = (calloc<ffi.Int64>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 8;
-    } else if (element is Float32List) {
-      final flattenData = data.flatten<double>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.float;
-      dataPtr = (calloc<ffi.Float>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 4;
-    } else if (element is Float64List || element is double) {
-      final flattenData = data.flatten<double>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.double;
-      dataPtr = (calloc<ffi.Double>(dataSize)
-            ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
-          .cast();
-      dataByteCount = dataSize * 8;
-    } else if (element is bool) {
-      final flattenData = data.flatten<bool>();
-      dataSize = flattenData.length;
-      dataType = ONNXTensorElementDataType.bool;
-      final ptr = calloc<ffi.Bool>(dataSize);
-      for (int i = 0; i < dataSize; ++i) {
-        ptr[i] = flattenData[i];
+    return usingNative((arena) {
+      final selectedShape = shape ?? data.shape;
+      final element = data.element();
+      var dataType = ONNXTensorElementDataType.undefined;
+      ffi.Pointer<ffi.Void> dataPtr = ffi.nullptr;
+      final dataAllocator = nativeAllocator;
+      var transferred = false;
+      arena.onReleaseAll(() {
+        if (!transferred && dataPtr != ffi.nullptr) {
+          dataAllocator.free(dataPtr);
+        }
+      });
+      int dataSize = 0;
+      int dataByteCount = 0;
+      if (element is Uint8List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.uint8;
+        dataPtr = (dataAllocator<ffi.Uint8>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize;
+      } else if (element is Int8List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.int8;
+        dataPtr = (dataAllocator<ffi.Int8>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize;
+      } else if (element is Uint16List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.uint16;
+        dataPtr = (dataAllocator<ffi.Uint16>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 2;
+      } else if (element is Int16List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.int16;
+        dataPtr = (dataAllocator<ffi.Int16>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 2;
+      } else if (element is Uint32List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.uint32;
+        dataPtr = (dataAllocator<ffi.Uint32>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 4;
+      } else if (element is Int32List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.int32;
+        dataPtr = (dataAllocator<ffi.Int32>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 4;
+      } else if (element is Uint64List) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.uint64;
+        dataPtr = (dataAllocator<ffi.Uint64>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 8;
+      } else if (element is Int64List || element is int) {
+        final flattenData = data.flatten<int>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.int64;
+        dataPtr = (dataAllocator<ffi.Int64>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 8;
+      } else if (element is Float32List) {
+        final flattenData = data.flatten<double>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.float;
+        dataPtr = (dataAllocator<ffi.Float>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 4;
+      } else if (element is Float64List || element is double) {
+        final flattenData = data.flatten<double>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.double;
+        dataPtr = (dataAllocator<ffi.Double>(dataSize)
+              ..asTypedList(dataSize).setRange(0, dataSize, flattenData))
+            .cast();
+        dataByteCount = dataSize * 8;
+      } else if (element is bool) {
+        final flattenData = data.flatten<bool>();
+        dataSize = flattenData.length;
+        dataType = ONNXTensorElementDataType.bool;
+        final ptr = dataAllocator<ffi.Bool>(dataSize);
+        for (int i = 0; i < dataSize; ++i) {
+          ptr[i] = flattenData[i];
+        }
+        dataPtr = ptr.cast();
+        dataByteCount = dataSize;
+      } else if (element is String) {
+        return _createTensorWithStringList(data.cast<String>(), selectedShape);
+      } else {
+        throw Exception('Invalid inputTensor element type.');
       }
-      dataPtr = ptr.cast();
-      dataByteCount = dataSize;
-    } else if (element is String) {
-      return _createTensorWithStringList(data.cast<String>(), shape);
-    } else {
-      throw Exception('Invalid inputTensor element type.');
-    }
 
-    final shapeSize = shape.length;
-    final shapePtr = calloc<ffi.Int64>(shapeSize);
-    shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, shape);
+      final shapeSize = selectedShape.length;
+      final shapePtr = arena<ffi.Int64>(shapeSize);
+      shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, selectedShape);
 
-    final ortMemoryInfoPtrPtr = calloc<ffi.Pointer<bg.OrtMemoryInfo>>();
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorGetInfo.asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtAllocator>,
-                ffi.Pointer<ffi.Pointer<bg.OrtMemoryInfo>>)>()(
-        OrtAllocator.instance.ptr, ortMemoryInfoPtrPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    // or
-    // OrtEnv.instance.ortApiPtr.ref.CreateCpuMemoryInfo.asFunction<
-    //         bg.OrtStatusPtr Function(
-    //             int, int, ffi.Pointer<ffi.Pointer<bg.OrtMemoryInfo>>)>()(
-    //     bg.OrtAllocatorType.OrtDeviceAllocator,
-    //     bg.OrtMemType.OrtMemTypeCPU,
-    //     ortMemoryInfoPtrPtr);
-    final ortMemoryInfoPtr = ortMemoryInfoPtrPtr.value;
-    final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateTensorWithDataAsOrtValue
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtMemoryInfo>,
-                    ffi.Pointer<ffi.Void>,
-                    int,
-                    ffi.Pointer<ffi.Int64>,
-                    int,
-                    int,
-                    ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
-        ortMemoryInfoPtr,
-        dataPtr,
-        dataByteCount,
-        shapePtr,
-        shapeSize,
-        dataType.value,
-        ortValuePtrPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final ortValuePtr = ortValuePtrPtr.value;
-    calloc.free(shapePtr);
-    calloc.free(ortValuePtrPtr);
-    calloc.free(ortMemoryInfoPtrPtr);
-    return OrtValueTensor(ortValuePtr, dataPtr);
+      final ortMemoryInfoPtrPtr = arena<ffi.Pointer<bg.OrtMemoryInfo>>();
+      var statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorGetInfo.asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtAllocator>,
+                  ffi.Pointer<ffi.Pointer<bg.OrtMemoryInfo>>)>()(
+          OrtAllocator.instance.ptr, ortMemoryInfoPtrPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      // or
+      // OrtEnv.instance.ortApiPtr.ref.CreateCpuMemoryInfo.asFunction<
+      //         bg.OrtStatusPtr Function(
+      //             int, int, ffi.Pointer<ffi.Pointer<bg.OrtMemoryInfo>>)>()(
+      //     bg.OrtAllocatorType.OrtDeviceAllocator,
+      //     bg.OrtMemType.OrtMemTypeCPU,
+      //     ortMemoryInfoPtrPtr);
+      final ortMemoryInfoPtr = ortMemoryInfoPtrPtr.value;
+      final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      arena.onReleaseAll(() {
+        if (!transferred && ortValuePtrPtr.value != ffi.nullptr) {
+          OrtEnv.instance.ortApiPtr.ref.ReleaseValue
+                  .asFunction<void Function(ffi.Pointer<bg.OrtValue>)>()(
+              ortValuePtrPtr.value);
+        }
+      });
+      statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateTensorWithDataAsOrtValue
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtMemoryInfo>,
+                      ffi.Pointer<ffi.Void>,
+                      int,
+                      ffi.Pointer<ffi.Int64>,
+                      int,
+                      int,
+                      ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
+          ortMemoryInfoPtr,
+          dataPtr,
+          dataByteCount,
+          shapePtr,
+          shapeSize,
+          dataType.value,
+          ortValuePtrPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final ortValuePtr = ortValuePtrPtr.value;
+      final tensor = OrtValueTensor(ortValuePtr, dataPtr);
+      tensor._dataAllocator = dataAllocator;
+      transferred = true;
+      return tensor;
+    });
   }
 
   @override
@@ -491,7 +515,7 @@ class OrtValueTensor extends OrtValue {
     if (_dataPtr == ffi.nullptr) {
       return;
     }
-    calloc.free(_dataPtr);
+    _dataAllocator.free(_dataPtr);
     _dataPtr = ffi.nullptr;
   }
 }
@@ -505,35 +529,35 @@ class OrtValueSequence extends OrtValue {
   // OrtTensorTypeAndShapeInfo? _firstMapValueInfo;
 
   OrtValueSequence(ffi.Pointer<bg.OrtValue> ptr) {
-    _ptr = ptr;
-    final valueCountPtr = calloc<ffi.Size>();
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueCount.asFunction<
-        bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-            ffi.Pointer<ffi.Size>)>()(_ptr, valueCountPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _valueCount = valueCountPtr.value;
-    calloc.free(valueCountPtr);
-    if (_valueCount <= 0) {
-      return;
-    }
-    final firstElementPtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    final firstElementPtr = _getOrtValue(_ptr, 0, firstElementPtrPtr);
-    final onnxTypePtr = calloc<ffi.Int32>();
-    statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueType.asFunction<
-        bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-            ffi.Pointer<ffi.Int32>)>()(firstElementPtr, onnxTypePtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _onnxType = ONNXType.valueOf(onnxTypePtr.value);
-    if (_onnxType == ONNXType.tensor) {
-      _tensorInfo = OrtTensorTypeAndShapeInfo(firstElementPtr);
-    } else if (_onnxType == ONNXType.map) {
-      // final infoMap = _createMapInfo(firstElementPtr);
-      // _firstMapKeyInfo = infoMap.entries.first.key;
-      // _firstMapValueInfo = infoMap.entries.first.value;
-    }
-    _releaseOrtValue(firstElementPtr);
-    calloc.free(firstElementPtrPtr);
-    calloc.free(onnxTypePtr);
+    usingNative((arena) {
+      _ptr = ptr;
+      final valueCountPtr = arena<ffi.Size>();
+      var statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueCount.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+              ffi.Pointer<ffi.Size>)>()(_ptr, valueCountPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _valueCount = valueCountPtr.value;
+
+      if (_valueCount <= 0) {
+        return;
+      }
+      final firstElementPtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      final firstElementPtr = _getOrtValue(_ptr, 0, firstElementPtrPtr);
+      arena.using(firstElementPtr, _releaseOrtValue);
+      final onnxTypePtr = arena<ffi.Int32>();
+      statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueType.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+              ffi.Pointer<ffi.Int32>)>()(firstElementPtr, onnxTypePtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _onnxType = ONNXType.valueOf(onnxTypePtr.value);
+      if (_onnxType == ONNXType.tensor) {
+        _tensorInfo = OrtTensorTypeAndShapeInfo(firstElementPtr);
+      } else if (_onnxType == ONNXType.map) {
+        // final infoMap = _createMapInfo(firstElementPtr);
+        // _firstMapKeyInfo = infoMap.entries.first.key;
+        // _firstMapValueInfo = infoMap.entries.first.value;
+      }
+    });
   }
 
   OrtValueSequence.fromAddress(int address) {
@@ -542,36 +566,49 @@ class OrtValueSequence extends OrtValue {
 
   @override
   List<OrtValue>? get value {
-    if (_onnxType == ONNXType.map) {
-      final maps = <OrtValueMap>[];
-      for (int i = 0; i < _valueCount; ++i) {
-        final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-        final ortValuePtr = _getOrtValue(_ptr, i, ortValuePtrPtr);
-        maps.add(OrtValueMap(ortValuePtr));
-        calloc.free(ortValuePtrPtr);
+    return usingNative((arena) {
+      var transferred = false;
+      if (_onnxType == ONNXType.map) {
+        final maps = <OrtValueMap>[];
+        for (int i = 0; i < _valueCount; ++i) {
+          final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+          final ortValuePtr = _getOrtValue(_ptr, i, ortValuePtrPtr);
+          arena.onReleaseAll(() {
+            if (!transferred) {
+              _releaseOrtValue(ortValuePtr);
+            }
+          });
+          maps.add(OrtValueMap(ortValuePtr));
+        }
+        transferred = true;
+        return maps;
+      } else if (_onnxType == ONNXType.tensor) {
+        switch (_tensorInfo?._tensorElementType) {
+          case ONNXTensorElementDataType.string:
+          case ONNXTensorElementDataType.int64:
+          case ONNXTensorElementDataType.float:
+          case ONNXTensorElementDataType.double:
+            final tensors = <OrtValueTensor>[];
+            for (int i = 0; i < _valueCount; ++i) {
+              final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+              final ortValuePtr = _getOrtValue(_ptr, i, ortValuePtrPtr);
+              arena.onReleaseAll(() {
+                if (!transferred) {
+                  _releaseOrtValue(ortValuePtr);
+                }
+              });
+              tensors.add(OrtValueTensor(ortValuePtr));
+            }
+            transferred = true;
+            return tensors;
+          default:
+            throw Exception(
+                'Unsupported type in a sequence, found ${_tensorInfo?._tensorElementType}');
+        }
+      } else {
+        throw Exception("Invalid element type found in sequence");
       }
-      return maps;
-    } else if (_onnxType == ONNXType.tensor) {
-      switch (_tensorInfo?._tensorElementType) {
-        case ONNXTensorElementDataType.string:
-        case ONNXTensorElementDataType.int64:
-        case ONNXTensorElementDataType.float:
-        case ONNXTensorElementDataType.double:
-          final tensors = <OrtValueTensor>[];
-          for (int i = 0; i < _valueCount; ++i) {
-            final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-            final ortValuePtr = _getOrtValue(_ptr, i, ortValuePtrPtr);
-            tensors.add(OrtValueTensor(ortValuePtr));
-            calloc.free(ortValuePtrPtr);
-          }
-          return tensors;
-        default:
-          throw Exception(
-              'Unsupported type in a sequence, found ${_tensorInfo?._tensorElementType}');
-      }
-    } else {
-      throw Exception("Invalid element type found in sequence");
-    }
+    });
   }
 }
 
@@ -614,21 +651,25 @@ class OrtValueMap extends OrtValue {
   }
 
   List<String> _getStringListWithIndex(int index) {
-    final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    final ortValuePtr = _getOrtValue(_ptr, index, ortValuePtrPtr);
-    final list = _getStringList(ortValuePtr);
-    _releaseOrtValue(ortValuePtr);
-    calloc.free(ortValuePtrPtr);
-    return list;
+    return usingNative((arena) {
+      final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      final ortValuePtr = _getOrtValue(_ptr, index, ortValuePtrPtr);
+      arena.using(ortValuePtr, _releaseOrtValue);
+      final list = _getStringList(ortValuePtr);
+
+      return list;
+    });
   }
 
   List<num> _getNumListWithIndex(int index) {
-    final ortValuePtrPtr = calloc<ffi.Pointer<bg.OrtValue>>();
-    final ortValuePtr = _getOrtValue(_ptr, index, ortValuePtrPtr);
-    final list = _getNumList(ortValuePtr);
-    _releaseOrtValue(ortValuePtr);
-    calloc.free(ortValuePtrPtr);
-    return list;
+    return usingNative((arena) {
+      final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
+      final ortValuePtr = _getOrtValue(_ptr, index, ortValuePtrPtr);
+      arena.using(ortValuePtr, _releaseOrtValue);
+      final list = _getNumList(ortValuePtr);
+
+      return list;
+    });
   }
 
   List<Object> _getMapValues() {
@@ -654,16 +695,17 @@ class OrtValueSparseTensor extends OrtValue {
   late OrtSparseFormat _ortSparseFormat;
 
   OrtValueSparseTensor(ffi.Pointer<bg.OrtValue> ptr) {
-    _ptr = ptr;
-    _info = OrtTensorTypeAndShapeInfo(ptr);
-    final ortSparseFormatPtr = calloc<ffi.Int32>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetSparseTensorFormat
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-                ffi.Pointer<ffi.Int32>)>()(ptr, ortSparseFormatPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _ortSparseFormat = OrtSparseFormat.valueOf(ortSparseFormatPtr.value);
-    calloc.free(ortSparseFormatPtr);
+    usingNative((arena) {
+      _ptr = ptr;
+      _info = OrtTensorTypeAndShapeInfo(ptr);
+      final ortSparseFormatPtr = arena<ffi.Int32>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetSparseTensorFormat
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+                  ffi.Pointer<ffi.Int32>)>()(ptr, ortSparseFormatPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _ortSparseFormat = OrtSparseFormat.valueOf(ortSparseFormatPtr.value);
+    });
   }
 
   OrtValueSparseTensor.fromAddress(int address) {
@@ -697,36 +739,41 @@ class OrtTensorTypeAndShapeInfo {
   List<int> _tensorShape = [];
 
   OrtTensorTypeAndShapeInfo(ffi.Pointer<bg.OrtValue> ortValuePtr) {
-    final infoPtrPtr = calloc<ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorTypeAndShape
-            .asFunction<
-                bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-                    ffi.Pointer<ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>>)>()(
-        ortValuePtr, infoPtrPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final infoPtr = infoPtrPtr.value;
-    _tensorElementType = _getTensorElementType(infoPtr);
-    // shape
-    _dimensionsCount = _getDimensionsCount(infoPtr);
-    _tensorShape = _getDimensions(infoPtr, _dimensionsCount);
-    _tensorShapeElementCount = _getTensorShapeElementCount(infoPtr);
-    _releaseTensorTypeAndShapeInfo(infoPtr);
-    calloc.free(infoPtrPtr);
+    usingNative((arena) {
+      final infoPtrPtr = arena<ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorTypeAndShape
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtValue>,
+                      ffi.Pointer<
+                          ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>>)>()(
+          ortValuePtr, infoPtrPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final infoPtr = infoPtrPtr.value;
+      arena.using(infoPtr, _releaseTensorTypeAndShapeInfo);
+      _tensorElementType = _getTensorElementType(infoPtr);
+      // shape
+      _dimensionsCount = _getDimensionsCount(infoPtr);
+      _tensorShape = _getDimensions(infoPtr, _dimensionsCount);
+      _tensorShapeElementCount = _getTensorShapeElementCount(infoPtr);
+    });
   }
 
   static ONNXTensorElementDataType _getTensorElementType(
       ffi.Pointer<bg.OrtTensorTypeAndShapeInfo> infoPtr) {
-    final onnxTensorElementDataTypePtr = calloc<ffi.Int32>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorElementType
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
-                    ffi.Pointer<ffi.Int32>)>()(
-        infoPtr, onnxTensorElementDataTypePtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final onnxTensorElementDataType = onnxTensorElementDataTypePtr.value;
-    calloc.free(onnxTensorElementDataTypePtr);
-    return ONNXTensorElementDataType.valueOf(onnxTensorElementDataType);
+    return usingNative((arena) {
+      final onnxTensorElementDataTypePtr = arena<ffi.Int32>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorElementType
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
+                      ffi.Pointer<ffi.Int32>)>()(
+          infoPtr, onnxTensorElementDataTypePtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final onnxTensorElementDataType = onnxTensorElementDataTypePtr.value;
+
+      return ONNXTensorElementDataType.valueOf(onnxTensorElementDataType);
+    });
   }
 
   static void _releaseTensorTypeAndShapeInfo(
@@ -737,41 +784,49 @@ class OrtTensorTypeAndShapeInfo {
 
   static int _getDimensionsCount(
       ffi.Pointer<bg.OrtTensorTypeAndShapeInfo> infoPtr) {
-    final countPtr = calloc<ffi.Size>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetDimensionsCount
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
-                ffi.Pointer<ffi.Size>)>()(infoPtr, countPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final count = countPtr.value;
-    calloc.free(countPtr);
-    return count;
+    return usingNative((arena) {
+      final countPtr = arena<ffi.Size>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetDimensionsCount
+          .asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
+                  ffi.Pointer<ffi.Size>)>()(infoPtr, countPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final count = countPtr.value;
+
+      return count;
+    });
   }
 
   static List<int> _getDimensions(
       ffi.Pointer<bg.OrtTensorTypeAndShapeInfo> infoPtr, int length) {
-    final dimensionsPtr = calloc<ffi.Int64>(length);
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetDimensions.asFunction<
-        bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
-            ffi.Pointer<ffi.Int64>, int)>()(infoPtr, dimensionsPtr, length);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final dimensions =
-        List<int>.generate(length, (index) => dimensionsPtr[index]);
-    calloc.free(dimensionsPtr);
-    return dimensions;
+    return usingNative((arena) {
+      final dimensionsPtr = arena<ffi.Int64>(length);
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetDimensions.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
+              ffi.Pointer<ffi.Int64>, int)>()(infoPtr, dimensionsPtr, length);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final dimensions =
+          List<int>.generate(length, (index) => dimensionsPtr[index]);
+
+      return dimensions;
+    });
   }
 
   static int _getTensorShapeElementCount(
       ffi.Pointer<bg.OrtTensorTypeAndShapeInfo> infoPtr) {
-    final countPtr = calloc<ffi.Size>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorShapeElementCount
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
-                ffi.Pointer<ffi.Size>)>()(infoPtr, countPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final count = countPtr.value;
-    calloc.free(countPtr);
-    return count;
+    return usingNative((arena) {
+      final countPtr = arena<ffi.Size>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.GetTensorShapeElementCount
+          .asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<bg.OrtTensorTypeAndShapeInfo>,
+                  ffi.Pointer<ffi.Size>)>()(infoPtr, countPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final count = countPtr.value;
+
+      return count;
+    });
   }
 }
 
@@ -832,7 +887,7 @@ enum ONNXTensorElementDataType {
       case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX64:
         return ONNXTensorElementDataType.complex64;
       case bg
-            .ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128:
+          .ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128:
         return ONNXTensorElementDataType.complex128;
       case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16:
         return ONNXTensorElementDataType.bFloat16;

@@ -45,3 +45,11 @@ paths containing spaces, Chinese characters, and emoji using the host's native
 runtime, and verify missing files still throw. Run the suite on Windows to verify
 the Windows DLL integration in addition to the platform-independent encoding
 checks.
+
+Memory regressions use an internal, zone-scoped counting allocator to verify
+Dart-owned native buffers are freed on success and on both Dart/native errors.
+They inject failure at each allocation in model loading, inference, tensor
+creation, and sequence extraction, and check that returned numeric tensor data
+remains alive until `release()`. These counts cover allocations made by the Dart
+wrapper, not ONNX Runtime's internal caches or allocations. The exported API and
+exception behavior are unchanged.

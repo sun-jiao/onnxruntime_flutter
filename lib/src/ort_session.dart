@@ -14,6 +14,7 @@ import 'package:onnxruntime/src/ort_value.dart';
 import 'package:onnxruntime/src/ort_provider.dart';
 import 'package:onnxruntime/src/providers/ort_flags.dart';
 import 'package:onnxruntime/src/util/native_path.dart';
+import 'package:onnxruntime/src/util/native_memory.dart';
 
 class OrtSession {
   bool _released = false;
@@ -33,7 +34,7 @@ class OrtSession {
 
   /// Creates a session from a file.
   OrtSession.fromFile(File modelFile, OrtSessionOptions options) {
-    using((arena) {
+    usingNative((arena) {
       final pp = arena<ffi.Pointer<bg.OrtSession>>();
       final path = allocateOrtPath(modelFile.path,
           isWindows: Platform.isWindows, allocator: arena);
@@ -47,35 +48,44 @@ class OrtSession {
       OrtStatus.checkOrtStatus(statusPtr);
       _ptr = pp.value;
     });
-    _init();
+    _initOwned();
   }
 
   /// Creates a session from buffer.
   OrtSession.fromBuffer(Uint8List modelBuffer, OrtSessionOptions options) {
-    final pp = calloc<ffi.Pointer<bg.OrtSession>>();
-    final size = modelBuffer.length;
-    final bufferPtr = calloc<ffi.Uint8>(size);
-    bufferPtr.asTypedList(size).setRange(0, size, modelBuffer);
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSessionFromArray
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtEnv>,
-                    ffi.Pointer<ffi.Void>,
-                    int,
-                    ffi.Pointer<bg.OrtSessionOptions>,
-                    ffi.Pointer<ffi.Pointer<bg.OrtSession>>)>()(
-        OrtEnv.instance.ptr, bufferPtr.cast(), size, options._ptr, pp);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _ptr = pp.value;
-    calloc.free(pp);
-    calloc.free(bufferPtr);
-    _init();
+    usingNative((arena) {
+      final pp = arena<ffi.Pointer<bg.OrtSession>>();
+      final size = modelBuffer.length;
+      final bufferPtr = arena<ffi.Uint8>(size);
+      bufferPtr.asTypedList(size).setRange(0, size, modelBuffer);
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSessionFromArray
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtEnv>,
+                      ffi.Pointer<ffi.Void>,
+                      int,
+                      ffi.Pointer<bg.OrtSessionOptions>,
+                      ffi.Pointer<ffi.Pointer<bg.OrtSession>>)>()(
+          OrtEnv.instance.ptr, bufferPtr.cast(), size, options._ptr, pp);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _ptr = pp.value;
+    });
+    _initOwned();
   }
 
   /// Creates a session from a pointer's address.
   OrtSession.fromAddress(int address) {
     _ptr = ffi.Pointer.fromAddress(address);
     _init();
+  }
+
+  void _initOwned() {
+    try {
+      _init();
+    } catch (_) {
+      _releaseNative();
+      rethrow;
+    }
   }
 
   void _init() {
@@ -86,150 +96,172 @@ class OrtSession {
   }
 
   int _getInputCount() {
-    final countPtr = calloc<ffi.Size>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetInputCount
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
-                ffi.Pointer<ffi.Size>)>()(_ptr, countPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final count = countPtr.value;
-    calloc.free(countPtr);
-    return count;
+    return usingNative((arena) {
+      final countPtr = arena<ffi.Size>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetInputCount
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
+                  ffi.Pointer<ffi.Size>)>()(_ptr, countPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final count = countPtr.value;
+      return count;
+    });
   }
 
   int _getOutputCount() {
-    final countPtr = calloc<ffi.Size>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetOutputCount
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
-                ffi.Pointer<ffi.Size>)>()(_ptr, countPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final count = countPtr.value;
-    calloc.free(countPtr);
-    return count;
+    return usingNative((arena) {
+      final countPtr = arena<ffi.Size>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetOutputCount
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
+                  ffi.Pointer<ffi.Size>)>()(_ptr, countPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final count = countPtr.value;
+      return count;
+    });
   }
 
   List<String> _getInputNames() {
-    final list = <String>[];
-    for (var i = 0; i < _inputCount; ++i) {
-      final namePtrPtr = calloc<ffi.Pointer<ffi.Char>>();
-      var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetInputName
-              .asFunction<
+    return usingNative((arena) {
+      final list = <String>[];
+      for (var i = 0; i < _inputCount; ++i) {
+        final namePtrPtr = arena<ffi.Pointer<ffi.Char>>();
+        var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetInputName
+                .asFunction<
+                    bg.OrtStatusPtr Function(
+                        ffi.Pointer<bg.OrtSession>,
+                        int,
+                        ffi.Pointer<bg.OrtAllocator>,
+                        ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(
+            _ptr, i, OrtAllocator.instance.ptr, namePtrPtr);
+        OrtStatus.checkOrtStatus(statusPtr);
+        arena.onReleaseAll(() {
+          statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorFree.asFunction<
                   bg.OrtStatusPtr Function(
-                      ffi.Pointer<bg.OrtSession>,
-                      int,
-                      ffi.Pointer<bg.OrtAllocator>,
-                      ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(
-          _ptr, i, OrtAllocator.instance.ptr, namePtrPtr);
-      OrtStatus.checkOrtStatus(statusPtr);
-      final name = namePtrPtr.value.cast<Utf8>().toDartString();
-      list.add(name);
-      statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorFree.asFunction<
-              bg.OrtStatusPtr Function(
-                  ffi.Pointer<bg.OrtAllocator>, ffi.Pointer<ffi.Void>)>()(
-          OrtAllocator.instance.ptr, namePtrPtr.value.cast());
-      OrtStatus.checkOrtStatus(statusPtr);
-      calloc.free(namePtrPtr);
-    }
-    return list;
+                      ffi.Pointer<bg.OrtAllocator>, ffi.Pointer<ffi.Void>)>()(
+              OrtAllocator.instance.ptr, namePtrPtr.value.cast());
+          OrtStatus.checkOrtStatus(statusPtr);
+        });
+        final name = namePtrPtr.value.cast<Utf8>().toDartString();
+        list.add(name);
+      }
+      return list;
+    });
   }
 
   List<String> _getOutputNames() {
-    final list = <String>[];
-    for (var i = 0; i < _outputCount; ++i) {
-      final namePtrPtr = calloc<ffi.Pointer<ffi.Char>>();
-      var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetOutputName
-              .asFunction<
+    return usingNative((arena) {
+      final list = <String>[];
+      for (var i = 0; i < _outputCount; ++i) {
+        final namePtrPtr = arena<ffi.Pointer<ffi.Char>>();
+        var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetOutputName
+                .asFunction<
+                    bg.OrtStatusPtr Function(
+                        ffi.Pointer<bg.OrtSession>,
+                        int,
+                        ffi.Pointer<bg.OrtAllocator>,
+                        ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(
+            _ptr, i, OrtAllocator.instance.ptr, namePtrPtr);
+        OrtStatus.checkOrtStatus(statusPtr);
+        arena.onReleaseAll(() {
+          statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorFree.asFunction<
                   bg.OrtStatusPtr Function(
-                      ffi.Pointer<bg.OrtSession>,
-                      int,
-                      ffi.Pointer<bg.OrtAllocator>,
-                      ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(
-          _ptr, i, OrtAllocator.instance.ptr, namePtrPtr);
-      OrtStatus.checkOrtStatus(statusPtr);
-      final name = namePtrPtr.value.cast<Utf8>().toDartString();
-      list.add(name);
-      statusPtr = OrtEnv.instance.ortApiPtr.ref.AllocatorFree.asFunction<
-              bg.OrtStatusPtr Function(
-                  ffi.Pointer<bg.OrtAllocator>, ffi.Pointer<ffi.Void>)>()(
-          OrtAllocator.instance.ptr, namePtrPtr.value.cast());
-      OrtStatus.checkOrtStatus(statusPtr);
-      calloc.free(namePtrPtr);
-    }
-    return list;
+                      ffi.Pointer<bg.OrtAllocator>, ffi.Pointer<ffi.Void>)>()(
+              OrtAllocator.instance.ptr, namePtrPtr.value.cast());
+          OrtStatus.checkOrtStatus(statusPtr);
+        });
+        final name = namePtrPtr.value.cast<Utf8>().toDartString();
+        list.add(name);
+      }
+      return list;
+    });
   }
 
   /// Performs inference synchronously.
   List<OrtValue?> run(OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) {
-    if (_released) {
-      throw StateError('The session has been released.');
-    }
-    final inputLength = inputs.length;
-    final inputNamePtrs = calloc<ffi.Pointer<ffi.Char>>(inputLength);
-    final inputPtrs = calloc<ffi.Pointer<bg.OrtValue>>(inputLength);
-    var i = 0;
-    for (final entry in inputs.entries) {
-      inputNamePtrs[i] = entry.key.toNativeUtf8().cast<ffi.Char>();
-      inputPtrs[i] = entry.value.ptr;
-      ++i;
-    }
-    outputNames ??= _outputNames;
-    final outputLength = outputNames.length;
-    final outputNamePtrs = calloc<ffi.Pointer<ffi.Char>>(outputLength);
-    final outputPtrs = calloc<ffi.Pointer<bg.OrtValue>>(outputLength);
-    for (int i = 0; i < outputLength; ++i) {
-      outputNamePtrs[i] = outputNames[i].toNativeUtf8().cast<ffi.Char>();
-      outputPtrs[i] = ffi.nullptr;
-    }
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.Run.asFunction<
-            bg.OrtStatusPtr Function(
-                ffi.Pointer<bg.OrtSession>,
-                ffi.Pointer<bg.OrtRunOptions>,
-                ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                ffi.Pointer<ffi.Pointer<bg.OrtValue>>,
-                int,
-                ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                int,
-                ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
-        _ptr,
-        runOptions._ptr,
-        inputNamePtrs,
-        inputPtrs,
-        inputLength,
-        outputNamePtrs,
-        outputLength,
-        outputPtrs);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final outputs = List<OrtValue?>.generate(outputLength, (index) {
-      final ortValuePtr = outputPtrs[index];
-      final onnxTypePtr = calloc<ffi.Int32>();
-      statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueType.asFunction<
-          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
-              ffi.Pointer<ffi.Int32>)>()(ortValuePtr, onnxTypePtr);
-      OrtStatus.checkOrtStatus(statusPtr);
-      final onnxType = ONNXType.valueOf(onnxTypePtr.value);
-      calloc.free(onnxTypePtr);
-      switch (onnxType) {
-        case ONNXType.tensor:
-          return OrtValueTensor(ortValuePtr);
-        case ONNXType.sequence:
-          return OrtValueSequence(ortValuePtr);
-        case ONNXType.map:
-          return OrtValueMap(ortValuePtr);
-        case ONNXType.sparseTensor:
-          return OrtValueSparseTensor(ortValuePtr);
-        case ONNXType.unknown:
-        case ONNXType.opaque:
-        case ONNXType.optional:
-          return null;
+    return usingNative((arena) {
+      if (_released) {
+        throw StateError('The session has been released.');
       }
+      final inputLength = inputs.length;
+      final inputNamePtrs = arena<ffi.Pointer<ffi.Char>>(inputLength);
+      final inputPtrs = arena<ffi.Pointer<bg.OrtValue>>(inputLength);
+      var i = 0;
+      for (final entry in inputs.entries) {
+        inputNamePtrs[i] =
+            entry.key.toNativeUtf8(allocator: arena).cast<ffi.Char>();
+        inputPtrs[i] = entry.value.ptr;
+        ++i;
+      }
+      final selectedOutputNames = outputNames ?? _outputNames;
+      final outputLength = selectedOutputNames.length;
+      final outputNamePtrs = arena<ffi.Pointer<ffi.Char>>(outputLength);
+      final outputPtrs = arena<ffi.Pointer<bg.OrtValue>>(outputLength);
+      arena.onReleaseAll(() {
+        for (var i = 0; i < outputLength; ++i) {
+          if (outputPtrs[i] != ffi.nullptr) {
+            OrtEnv.instance.ortApiPtr.ref.ReleaseValue
+                    .asFunction<void Function(ffi.Pointer<bg.OrtValue>)>()(
+                outputPtrs[i]);
+          }
+        }
+      });
+      for (int i = 0; i < outputLength; ++i) {
+        outputNamePtrs[i] = selectedOutputNames[i]
+            .toNativeUtf8(allocator: arena)
+            .cast<ffi.Char>();
+        outputPtrs[i] = ffi.nullptr;
+      }
+      var statusPtr = OrtEnv.instance.ortApiPtr.ref.Run.asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<bg.OrtSession>,
+                  ffi.Pointer<bg.OrtRunOptions>,
+                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
+                  ffi.Pointer<ffi.Pointer<bg.OrtValue>>,
+                  int,
+                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
+                  int,
+                  ffi.Pointer<ffi.Pointer<bg.OrtValue>>)>()(
+          _ptr,
+          runOptions._ptr,
+          inputNamePtrs,
+          inputPtrs,
+          inputLength,
+          outputNamePtrs,
+          outputLength,
+          outputPtrs);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final outputs = List<OrtValue?>.generate(outputLength, (index) {
+        final ortValuePtr = outputPtrs[index];
+        final onnxTypePtr = arena<ffi.Int32>();
+        statusPtr = OrtEnv.instance.ortApiPtr.ref.GetValueType.asFunction<
+            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>,
+                ffi.Pointer<ffi.Int32>)>()(ortValuePtr, onnxTypePtr);
+        OrtStatus.checkOrtStatus(statusPtr);
+        final onnxType = ONNXType.valueOf(onnxTypePtr.value);
+        switch (onnxType) {
+          case ONNXType.tensor:
+            return OrtValueTensor(ortValuePtr);
+          case ONNXType.sequence:
+            return OrtValueSequence(ortValuePtr);
+          case ONNXType.map:
+            return OrtValueMap(ortValuePtr);
+          case ONNXType.sparseTensor:
+            return OrtValueSparseTensor(ortValuePtr);
+          case ONNXType.unknown:
+          case ONNXType.opaque:
+          case ONNXType.optional:
+            return null;
+        }
+      });
+      for (var i = 0; i < outputLength; ++i) {
+        if (outputs[i] != null) {
+          outputPtrs[i] = ffi.nullptr;
+        }
+      }
+      return outputs;
     });
-    calloc.free(inputNamePtrs);
-    calloc.free(inputPtrs);
-    calloc.free(outputNamePtrs);
-    calloc.free(outputPtrs);
-    return outputs;
   }
 
   /// Performs inference asynchronously.
@@ -307,14 +339,15 @@ class OrtSessionOptions {
   }
 
   void _create() {
-    final pp = calloc<ffi.Pointer<bg.OrtSessionOptions>>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSessionOptions
-        .asFunction<
-            bg.OrtStatusPtr Function(
-                ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>)>()(pp);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _ptr = pp.value;
-    calloc.free(pp);
+    usingNative((arena) {
+      final pp = arena<ffi.Pointer<bg.OrtSessionOptions>>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateSessionOptions
+          .asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>)>()(pp);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _ptr = pp.value;
+    });
   }
 
   void release() {
@@ -386,38 +419,41 @@ class OrtSessionOptions {
 
   bool _appendExecutionProvider2(
       OrtProvider provider, Map<String, String> providerOptions) {
-    bg.OrtStatusPtr? statusPtr;
-    var providerName = '';
-    switch (provider) {
-      case OrtProvider.xnnpack:
-        providerName = 'XNNPACK';
-        break;
-      default:
-        return false;
-    }
-    final providerNamePtr = providerName.toNativeUtf8().cast<ffi.Char>();
-    var size = providerOptions.length;
-    final keyPtrPtr = calloc<ffi.Pointer<ffi.Char>>(size);
-    final valuePtrPtr = calloc<ffi.Pointer<ffi.Char>>(size);
-    var i = 0;
-    for (final entry in providerOptions.entries) {
-      keyPtrPtr[i] = entry.key.toNativeUtf8().cast<ffi.Char>();
-      valuePtrPtr[i] = entry.value.toNativeUtf8().cast<ffi.Char>();
-      ++i;
-    }
-    statusPtr = OrtEnv
-        .instance.ortApiPtr.ref.SessionOptionsAppendExecutionProvider
-        .asFunction<
-            bg.OrtStatusPtr Function(
-                ffi.Pointer<bg.OrtSessionOptions>,
-                ffi.Pointer<ffi.Char>,
-                ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                int)>()(_ptr, providerNamePtr, keyPtrPtr, valuePtrPtr, size);
-    OrtStatus.checkOrtStatus(statusPtr);
-    calloc.free(keyPtrPtr);
-    calloc.free(valuePtrPtr);
-    return true;
+    return usingNative((arena) {
+      bg.OrtStatusPtr? statusPtr;
+      var providerName = '';
+      switch (provider) {
+        case OrtProvider.xnnpack:
+          providerName = 'XNNPACK';
+          break;
+        default:
+          return false;
+      }
+      final providerNamePtr =
+          providerName.toNativeUtf8(allocator: arena).cast<ffi.Char>();
+      var size = providerOptions.length;
+      final keyPtrPtr = arena<ffi.Pointer<ffi.Char>>(size);
+      final valuePtrPtr = arena<ffi.Pointer<ffi.Char>>(size);
+      var i = 0;
+      for (final entry in providerOptions.entries) {
+        keyPtrPtr[i] =
+            entry.key.toNativeUtf8(allocator: arena).cast<ffi.Char>();
+        valuePtrPtr[i] =
+            entry.value.toNativeUtf8(allocator: arena).cast<ffi.Char>();
+        ++i;
+      }
+      statusPtr = OrtEnv
+          .instance.ortApiPtr.ref.SessionOptionsAppendExecutionProvider
+          .asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<bg.OrtSessionOptions>,
+                  ffi.Pointer<ffi.Char>,
+                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
+                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
+                  int)>()(_ptr, providerNamePtr, keyPtrPtr, valuePtrPtr, size);
+      OrtStatus.checkOrtStatus(statusPtr);
+      return true;
+    });
   }
 
   /// Appends cpu provider.
@@ -462,13 +498,15 @@ class OrtRunOptions {
   }
 
   void _create() {
-    final pp = calloc<ffi.Pointer<bg.OrtRunOptions>>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateRunOptions.asFunction<
-        bg.OrtStatusPtr Function(
-            ffi.Pointer<ffi.Pointer<bg.OrtRunOptions>>)>()(pp);
-    OrtStatus.checkOrtStatus(statusPtr);
-    _ptr = pp.value;
-    calloc.free(pp);
+    usingNative((arena) {
+      final pp = arena<ffi.Pointer<bg.OrtRunOptions>>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.CreateRunOptions
+          .asFunction<
+              bg.OrtStatusPtr Function(
+                  ffi.Pointer<ffi.Pointer<bg.OrtRunOptions>>)>()(pp);
+      OrtStatus.checkOrtStatus(statusPtr);
+      _ptr = pp.value;
+    });
   }
 
   void release() {
@@ -490,16 +528,17 @@ class OrtRunOptions {
   }
 
   int getRunLogVerbosityLevel() {
-    final levelPtr = calloc<ffi.Int>();
-    final statusPtr = OrtEnv
-        .instance.ortApiPtr.ref.RunOptionsGetRunLogVerbosityLevel
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
-                ffi.Pointer<ffi.Int>)>()(_ptr, levelPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final level = levelPtr.value;
-    calloc.free(levelPtr);
-    return level;
+    return usingNative((arena) {
+      final levelPtr = arena<ffi.Int>();
+      final statusPtr = OrtEnv
+          .instance.ortApiPtr.ref.RunOptionsGetRunLogVerbosityLevel
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
+                  ffi.Pointer<ffi.Int>)>()(_ptr, levelPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final level = levelPtr.value;
+      return level;
+    });
   }
 
   void setRunLogSeverityLevel(int level) {
@@ -512,37 +551,41 @@ class OrtRunOptions {
   }
 
   int getRunLogSeverityLevel() {
-    final levelPtr = calloc<ffi.Int>();
-    final statusPtr = OrtEnv
-        .instance.ortApiPtr.ref.RunOptionsGetRunLogSeverityLevel
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
-                ffi.Pointer<ffi.Int>)>()(_ptr, levelPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final level = levelPtr.value;
-    calloc.free(levelPtr);
-    return level;
+    return usingNative((arena) {
+      final levelPtr = arena<ffi.Int>();
+      final statusPtr = OrtEnv
+          .instance.ortApiPtr.ref.RunOptionsGetRunLogSeverityLevel
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
+                  ffi.Pointer<ffi.Int>)>()(_ptr, levelPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final level = levelPtr.value;
+      return level;
+    });
   }
 
   void setRunTag(String tag) {
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsSetRunTag
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtRunOptions>, ffi.Pointer<ffi.Char>)>()(
-        _ptr, tag.toNativeUtf8().cast<ffi.Char>());
-    OrtStatus.checkOrtStatus(statusPtr);
+    usingNative((arena) {
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsSetRunTag
+              .asFunction<
+                  bg.OrtStatusPtr Function(
+                      ffi.Pointer<bg.OrtRunOptions>, ffi.Pointer<ffi.Char>)>()(
+          _ptr, tag.toNativeUtf8(allocator: arena).cast<ffi.Char>());
+      OrtStatus.checkOrtStatus(statusPtr);
+    });
   }
 
   String getRunTag() {
-    final tagPtr = calloc<ffi.Pointer<ffi.Char>>();
-    final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsGetRunTag
-        .asFunction<
-            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
-                ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(_ptr, tagPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final tag = tagPtr.value.cast<Utf8>().toDartString();
-    calloc.free(tagPtr);
-    return tag;
+    return usingNative((arena) {
+      final tagPtr = arena<ffi.Pointer<ffi.Char>>();
+      final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsGetRunTag
+          .asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>,
+                  ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(_ptr, tagPtr);
+      OrtStatus.checkOrtStatus(statusPtr);
+      final tag = tagPtr.value.cast<Utf8>().toDartString();
+      return tag;
+    });
   }
 
   void setTerminate() {
