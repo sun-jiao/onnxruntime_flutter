@@ -25,3 +25,9 @@ flutter test
 The tests cover concurrent first calls, repeated concurrent batches after
 initialization, unique output ownership, per-request values, and sequential calls
 with both default and explicit output names.
+
+Failure regressions cover invalid input names/shapes and output names, successful
+requests after an error, mixed successful/failing concurrent requests, and abrupt
+worker exit. Failed asynchronous calls retain the existing empty-list result.
+Test-only five-second timeouts detect unresolved futures; no timeout is added to
+the library API.

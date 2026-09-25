@@ -15,6 +15,7 @@ class OrtIsolateSession {
   IsolateSessionState get state => _state;
   var _state = IsolateSessionState.idle;
   var _initialized = false;
+  var _workerStopped = false;
   Future<void>? _initialization;
   var _nextRequestId = 0;
   final _completer = Completer();
@@ -29,7 +30,9 @@ class OrtIsolateSession {
     final rootIsolateSendPort = rootIsolateReceivePort.sendPort;
     _newIsolate = await Isolate.spawn(
         createNewIsolateContext, rootIsolateSendPort,
-        debugName: debugName);
+        debugName: debugName,
+        onError: rootIsolateSendPort,
+        onExit: rootIsolateSendPort);
     _streamSubscription = rootIsolateReceivePort.listen((message) {
       if (message is SendPort) {
         _newIsolateSendPort = message;
@@ -38,8 +41,24 @@ class OrtIsolateSession {
       if (message is _IsolateSessionResult) {
         _outputController.add(message);
       }
+      if (message == null || message is List) {
+        _handleWorkerStopped();
+      }
     });
     await _completer.future;
+  }
+
+  void _handleWorkerStopped() {
+    if (_workerStopped) {
+      return;
+    }
+    _workerStopped = true;
+    final error = StateError('The inference isolate has stopped.');
+    if (!_completer.isCompleted) {
+      _completer.completeError(error);
+    }
+    // Complete every pending request through run()'s existing error handling.
+    _outputController.addError(error);
   }
 
   static Future<void> createNewIsolateContext(
@@ -48,27 +67,33 @@ class OrtIsolateSession {
     final newIsolateSendPort = newIsolateReceivePort.sendPort;
     rootIsolateSendPort.send(newIsolateSendPort);
     await for (final _IsolateSessionData data in newIsolateReceivePort) {
-      final session = OrtSession.fromAddress(data.session);
-      final runOptions = OrtRunOptions.fromAddress(data.runOptions);
-      final inputs = data.inputs.map(
-          (key, value) => MapEntry(key, OrtValueTensor.fromAddress(value)));
-      final outputNames = data.outputNames;
-      final outputs = session.run(runOptions, inputs, outputNames).map((e) {
-        ONNXType onnxType;
-        if (e is OrtValueTensor) {
-          onnxType = ONNXType.tensor;
-        } else if (e is OrtValueSequence) {
-          onnxType = ONNXType.sequence;
-        } else if (e is OrtValueMap) {
-          onnxType = ONNXType.map;
-        } else if (e is OrtValueSparseTensor) {
-          onnxType = ONNXType.sparseTensor;
-        } else {
-          onnxType = ONNXType.tensor;
-        }
-        return MapEntry(onnxType.value, e?.address);
-      }).toList();
-      rootIsolateSendPort.send(_IsolateSessionResult(data.requestId, outputs));
+      try {
+        final session = OrtSession.fromAddress(data.session);
+        final runOptions = OrtRunOptions.fromAddress(data.runOptions);
+        final inputs = data.inputs.map(
+            (key, value) => MapEntry(key, OrtValueTensor.fromAddress(value)));
+        final outputNames = data.outputNames;
+        final outputs = session.run(runOptions, inputs, outputNames).map((e) {
+          ONNXType onnxType;
+          if (e is OrtValueTensor) {
+            onnxType = ONNXType.tensor;
+          } else if (e is OrtValueSequence) {
+            onnxType = ONNXType.sequence;
+          } else if (e is OrtValueMap) {
+            onnxType = ONNXType.map;
+          } else if (e is OrtValueSparseTensor) {
+            onnxType = ONNXType.sparseTensor;
+          } else {
+            onnxType = ONNXType.tensor;
+          }
+          return MapEntry(onnxType.value, e?.address);
+        }).toList();
+        rootIsolateSendPort
+            .send(_IsolateSessionResult(data.requestId, outputs));
+      } catch (_) {
+        // Keep failures scoped to their request and preserve the [] result.
+        rootIsolateSendPort.send(_IsolateSessionResult(data.requestId, []));
+      }
     }
   }
 
@@ -77,9 +102,12 @@ class OrtIsolateSession {
       [List<String>? outputNames]) async {
     try {
       // Concurrent first calls must share the same worker and handshake.
-      if (!_initialized) {
+      if (!_initialized && !_workerStopped) {
         await (_initialization ??= _init());
         _initialized = true;
+      }
+      if (_workerStopped) {
+        throw StateError('The inference isolate has stopped.');
       }
       final transformedInputs =
           inputs.map((key, value) => MapEntry(key, value.address));
