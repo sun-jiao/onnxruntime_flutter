@@ -13,9 +13,21 @@ abstract class OrtValue {
   bool _released = false;
   late ffi.Pointer<bg.OrtValue> _ptr;
 
-  ffi.Pointer<bg.OrtValue> get ptr => _ptr;
+  void _checkNotReleased() {
+    if (_released) {
+      throw StateError('The value has been released.');
+    }
+  }
 
-  int get address => _ptr.address;
+  ffi.Pointer<bg.OrtValue> get ptr {
+    _checkNotReleased();
+    return _ptr;
+  }
+
+  int get address {
+    _checkNotReleased();
+    return _ptr.address;
+  }
 
   Object? get value;
 
@@ -465,6 +477,7 @@ class OrtValueTensor extends OrtValue {
 
   @override
   dynamic get value {
+    _checkNotReleased();
     if (_info._dimensionsCount == 0) {
       // scalar tensor
       switch (_info._tensorElementType) {
@@ -567,6 +580,7 @@ class OrtValueSequence extends OrtValue {
 
   @override
   List<OrtValue>? get value {
+    _checkNotReleased();
     return usingNative((arena) {
       var transferred = false;
       if (_onnxType == ONNXType.map) {
@@ -628,6 +642,7 @@ class OrtValueMap extends OrtValue {
 
   @override
   Map get value {
+    _checkNotReleased();
     final keys = _getMapKeys();
     final values = _getMapValues();
     final map = {};
@@ -713,6 +728,7 @@ class OrtValueSparseTensor extends OrtValue {
   @override
   // ignore: body_might_complete_normally_nullable
   Object? get value {
+    _checkNotReleased();
     switch (_ortSparseFormat) {
       case OrtSparseFormat.coo:
         // TODO: Handle this case.

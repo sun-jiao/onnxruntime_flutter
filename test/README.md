@@ -29,6 +29,15 @@ native destruction is deferred until accepted runs finish and the worker exits.
 Inputs and run options must remain alive until their pending inference futures
 complete, as with any asynchronous inference call.
 
+Use-after-release regressions cover tensor and complex-value reads, handle
+access, option methods, and passing released options to inference or constructors.
+Synchronous access is rejected with `StateError` before using the native handle;
+asynchronous inference retains its empty-list failure result and can recover on
+the next valid request. Repeated release, cached session metadata, and accepted
+in-flight runs retain their existing behavior. These guards track each wrapper's
+own release state; callers remain responsible for previously exported raw handles
+and for keeping inputs and run options alive until asynchronous runs finish.
+
 File-session tests check UTF-16 (Windows) and UTF-8 (other platforms), including
 terminators and surrogate pairs, on every host. They also load and run models in
 paths containing spaces, Chinese characters, and emoji using the host's native

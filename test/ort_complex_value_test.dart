@@ -76,6 +76,37 @@ void main() {
     });
   }
 
+  test('released complex values reject data and handle access', () {
+    final keys = OrtValueTensor.createTensorWithDataList([10, 20]);
+    final values =
+        OrtValueTensor.createTensorWithDataList(Float32List.fromList([1, 2]));
+    final wrappers = <OrtValue>[];
+    try {
+      wrappers.add(OrtValueMap(_createValue([keys, values], ONNXType.map)));
+      wrappers.add(OrtValueSequence(_createValue([values], ONNXType.sequence)));
+      wrappers.add(OrtValueSparseTensor(_createSparse(true)));
+      for (final wrapper in wrappers) {
+        expect(wrapper.address, wrapper.ptr.address);
+        // Reading children before release must remain valid.
+        _read(wrapper);
+        wrapper.release();
+        expect(() => wrapper.value, throwsStateError);
+        expect(() => wrapper.ptr, throwsStateError);
+        expect(() => wrapper.address, throwsStateError);
+        wrapper.release();
+      }
+      // The child tensors retain their independent ownership.
+      expect(keys.value, [10, 20]);
+      expect(values.value, [1.0, 2.0]);
+    } finally {
+      for (final wrapper in wrappers) {
+        wrapper.release();
+      }
+      keys.release();
+      values.release();
+    }
+  });
+
   for (final fixture in ['tensor_sequence', 'map_sequence']) {
     test('$fixture has equivalent synchronous and asynchronous outputs',
         () async {

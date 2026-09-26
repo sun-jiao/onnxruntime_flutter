@@ -36,6 +36,7 @@ class OrtEnv {
       {OrtLoggingLevel level = OrtLoggingLevel.warning,
       String logId = 'DartOnnxRuntime',
       OrtThreadingOptions? options}) {
+    options?._checkNotReleased();
     usingNative((arena) {
       final pp = arena<ffi.Pointer<bg.OrtEnv>>();
       bg.OrtStatusPtr statusPtr;
@@ -177,6 +178,12 @@ class OrtThreadingOptions {
   bool _released = false;
   late ffi.Pointer<bg.OrtThreadingOptions> _ptr;
 
+  void _checkNotReleased() {
+    if (_released) {
+      throw StateError('The threading options have been released.');
+    }
+  }
+
   OrtThreadingOptions() {
     _create();
   }
@@ -204,6 +211,7 @@ class OrtThreadingOptions {
 
   /// Sets the number of global intra op threads.
   void setGlobalIntraOpNumThreads(int numThreads) {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetGlobalIntraOpNumThreads
         .asFunction<
             bg.OrtStatusPtr Function(
@@ -213,6 +221,7 @@ class OrtThreadingOptions {
 
   /// Sets the number of global inter op threads.
   void setGlobalInterOpNumThreads(int numThreads) {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetGlobalInterOpNumThreads
         .asFunction<
             bg.OrtStatusPtr Function(
@@ -222,6 +231,7 @@ class OrtThreadingOptions {
 
   /// Sets the global spin control.
   void setGlobalSpinControl(bool allowSpinning) {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetGlobalSpinControl
         .asFunction<
             bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtThreadingOptions>,
@@ -230,6 +240,7 @@ class OrtThreadingOptions {
   }
 
   void setGlobalDenormalAsZero() {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetGlobalDenormalAsZero
         .asFunction<
             bg.OrtStatusPtr Function(
@@ -239,6 +250,7 @@ class OrtThreadingOptions {
 
   /// Sets the global intra op thread affinity.
   void setGlobalIntraOpThreadAffinity(String affinity) {
+    _checkNotReleased();
     usingNative((arena) {
       final statusPtr = OrtEnv
               .instance.ortApiPtr.ref.SetGlobalIntraOpThreadAffinity

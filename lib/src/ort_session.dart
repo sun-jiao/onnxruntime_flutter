@@ -21,13 +21,24 @@ import 'package:onnxruntime/src/util/execution_provider.dart';
 class OrtSession {
   bool _released = false;
   late ffi.Pointer<bg.OrtSession> _ptr;
+
   late int _inputCount;
   late List<String> _inputNames;
   late int _outputCount;
   late List<String> _outputNames;
   OrtIsolateSession? _isolateSession;
 
-  int get address => _ptr.address;
+  void _checkNotReleased() {
+    if (_released) {
+      throw StateError('The session has been released.');
+    }
+  }
+
+  int get address {
+    _checkNotReleased();
+    return _ptr.address;
+  }
+
   int get inputCount => _inputCount;
   List<String> get inputNames => _inputNames;
   int get outputCount => _outputCount;
@@ -36,6 +47,7 @@ class OrtSession {
 
   /// Creates a session from a file.
   OrtSession.fromFile(File modelFile, OrtSessionOptions options) {
+    options._checkNotReleased();
     usingNative((arena) {
       final pp = arena<ffi.Pointer<bg.OrtSession>>();
       final path = allocateOrtPath(modelFile.path,
@@ -55,6 +67,7 @@ class OrtSession {
 
   /// Creates a session from buffer.
   OrtSession.fromBuffer(Uint8List modelBuffer, OrtSessionOptions options) {
+    options._checkNotReleased();
     usingNative((arena) {
       final pp = arena<ffi.Pointer<bg.OrtSession>>();
       final size = modelBuffer.length;
@@ -183,9 +196,8 @@ class OrtSession {
   List<OrtValue?> run(OrtRunOptions runOptions, Map<String, OrtValue> inputs,
       [List<String>? outputNames]) {
     return usingNative((arena) {
-      if (_released) {
-        throw StateError('The session has been released.');
-      }
+      _checkNotReleased();
+      runOptions._checkNotReleased();
       final inputLength = inputs.length;
       final inputNamePtrs = arena<ffi.Pointer<ffi.Char>>(inputLength);
       final inputPtrs = arena<ffi.Pointer<bg.OrtValue>>(inputLength);
@@ -278,9 +290,7 @@ class OrtSession {
   }
 
   String getMetadatas(String key) {
-    if (_released) {
-      throw StateError('The session has been released.');
-    }
+    _checkNotReleased();
     return readModelMetadata(
         OrtEnv.instance.ortApiPtr, _ptr, OrtAllocator.instance.ptr, key);
   }
@@ -311,7 +321,14 @@ class OrtSession {
 class OrtSessionOptions {
   bool _released = false;
   late ffi.Pointer<bg.OrtSessionOptions> _ptr;
+
   int _intraOpNumThreads = 0;
+
+  void _checkNotReleased() {
+    if (_released) {
+      throw StateError('The session options have been released.');
+    }
+  }
 
   OrtSessionOptions() {
     _create();
@@ -340,6 +357,7 @@ class OrtSessionOptions {
 
   /// Sets the number of intra op threads.
   void setIntraOpNumThreads(int numThreads) {
+    _checkNotReleased();
     _intraOpNumThreads = numThreads;
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetIntraOpNumThreads
         .asFunction<
@@ -350,6 +368,7 @@ class OrtSessionOptions {
 
   /// Sets the number of inter op threads.
   void setInterOpNumThreads(int numThreads) {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.SetInterOpNumThreads
         .asFunction<
             bg.OrtStatusPtr Function(
@@ -359,6 +378,7 @@ class OrtSessionOptions {
 
   /// Sets the level of session graph optimization.
   void setSessionGraphOptimizationLevel(GraphOptimizationLevel level) {
+    _checkNotReleased();
     final statusPtr = OrtEnv
         .instance.ortApiPtr.ref.SetSessionGraphOptimizationLevel
         .asFunction<
@@ -368,6 +388,7 @@ class OrtSessionOptions {
   }
 
   bool _appendExecutionProvider(OrtProvider provider, OrtFlags flags) {
+    _checkNotReleased();
     var result = false;
     bg.OrtStatusPtr? statusPtr;
     switch (provider) {
@@ -398,6 +419,7 @@ class OrtSessionOptions {
 
   bool _appendExecutionProvider2(
       OrtProvider provider, Map<String, String> providerOptions) {
+    _checkNotReleased();
     return appendExecutionProvider(
       OrtEnv.instance.ortApiPtr,
       _ptr,
@@ -441,7 +463,16 @@ class OrtRunOptions {
   bool _released = false;
   late ffi.Pointer<bg.OrtRunOptions> _ptr;
 
-  int get address => _ptr.address;
+  void _checkNotReleased() {
+    if (_released) {
+      throw StateError('The run options have been released.');
+    }
+  }
+
+  int get address {
+    _checkNotReleased();
+    return _ptr.address;
+  }
 
   OrtRunOptions() {
     _create();
@@ -473,6 +504,7 @@ class OrtRunOptions {
   }
 
   void setRunLogVerbosityLevel(int level) {
+    _checkNotReleased();
     final statusPtr = OrtEnv
         .instance.ortApiPtr.ref.RunOptionsSetRunLogVerbosityLevel
         .asFunction<
@@ -482,6 +514,7 @@ class OrtRunOptions {
   }
 
   int getRunLogVerbosityLevel() {
+    _checkNotReleased();
     return usingNative((arena) {
       final levelPtr = arena<ffi.Int>();
       final statusPtr = OrtEnv
@@ -496,6 +529,7 @@ class OrtRunOptions {
   }
 
   void setRunLogSeverityLevel(int level) {
+    _checkNotReleased();
     final statusPtr = OrtEnv
         .instance.ortApiPtr.ref.RunOptionsSetRunLogSeverityLevel
         .asFunction<
@@ -505,6 +539,7 @@ class OrtRunOptions {
   }
 
   int getRunLogSeverityLevel() {
+    _checkNotReleased();
     return usingNative((arena) {
       final levelPtr = arena<ffi.Int>();
       final statusPtr = OrtEnv
@@ -519,6 +554,7 @@ class OrtRunOptions {
   }
 
   void setRunTag(String tag) {
+    _checkNotReleased();
     usingNative((arena) {
       final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsSetRunTag
               .asFunction<
@@ -530,6 +566,7 @@ class OrtRunOptions {
   }
 
   String getRunTag() {
+    _checkNotReleased();
     return usingNative((arena) {
       final tagPtr = arena<ffi.Pointer<ffi.Char>>();
       final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsGetRunTag
@@ -543,6 +580,7 @@ class OrtRunOptions {
   }
 
   void setTerminate() {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsSetTerminate
         .asFunction<
             bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>)>()(_ptr);
@@ -550,6 +588,7 @@ class OrtRunOptions {
   }
 
   void unsetTerminate() {
+    _checkNotReleased();
     final statusPtr = OrtEnv.instance.ortApiPtr.ref.RunOptionsUnsetTerminate
         .asFunction<
             bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtRunOptions>)>()(_ptr);
