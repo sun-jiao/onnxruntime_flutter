@@ -147,7 +147,7 @@ class OrtIsolateSession {
           case ONNXType.tensor:
             return OrtValueTensor.fromAddress(e.value);
           case ONNXType.sequence:
-            return OrtValueSparseTensor.fromAddress(e.value);
+            return OrtValueSequence.fromAddress(e.value);
           case ONNXType.map:
             return OrtValueMap.fromAddress(e.value);
           case ONNXType.sparseTensor:

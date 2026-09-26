@@ -53,3 +53,13 @@ creation, and sequence extraction, and check that returned numeric tensor data
 remains alive until `release()`. These counts cover allocations made by the Dart
 wrapper, not ONNX Runtime's internal caches or allocations. The exported API and
 exception behavior are unchanged.
+
+Complex-value regressions compare pointer and address construction for Map,
+Sequence, and SparseTensor. The tiny `fixtures/tensor_sequence.onnx` and
+`fixtures/map_sequence.onnx` models exercise real synchronous/asynchronous
+inference, concurrent requests, mixed tensor/sequence outputs, output ordering,
+and sequences of maps. Regenerate them with
+`python3 test/fixtures/generate_complex_outputs.py` (no extra dependencies).
+SparseTensor retains its existing `value` behavior: initialized sparse formats
+return `null`; an undefined format throws. This change does not introduce a new
+sparse-data representation.

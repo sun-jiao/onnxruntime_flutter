@@ -560,9 +560,8 @@ class OrtValueSequence extends OrtValue {
     });
   }
 
-  OrtValueSequence.fromAddress(int address) {
-    _ptr = ffi.Pointer.fromAddress(address);
-  }
+  OrtValueSequence.fromAddress(int address)
+      : this(ffi.Pointer.fromAddress(address));
 
   @override
   List<OrtValue>? get value {
@@ -623,9 +622,7 @@ class OrtValueMap extends OrtValue {
     _valueInfo = infoMap.entries.first.value;
   }
 
-  OrtValueMap.fromAddress(int address) {
-    _ptr = ffi.Pointer.fromAddress(address);
-  }
+  OrtValueMap.fromAddress(int address) : this(ffi.Pointer.fromAddress(address));
 
   @override
   Map get value {
@@ -708,9 +705,8 @@ class OrtValueSparseTensor extends OrtValue {
     });
   }
 
-  OrtValueSparseTensor.fromAddress(int address) {
-    _ptr = ffi.Pointer.fromAddress(address);
-  }
+  OrtValueSparseTensor.fromAddress(int address)
+      : this(ffi.Pointer.fromAddress(address));
 
   @override
   // ignore: body_might_complete_normally_nullable
