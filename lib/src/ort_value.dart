@@ -227,6 +227,71 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  /// Returns a flat, independently owned copy of numeric tensor data.
+  /// The copy survives release() and modifications never affect this tensor.
+  /// Bool, string, half-precision and complex values are unsupported.
+  TypedData toTypedData() {
+    _checkNotReleased();
+    final count = _info._tensorShapeElementCount;
+    return usingNative((arena) {
+      switch (_info._tensorElementType) {
+        case ONNXTensorElementDataType.uint8:
+          if (count == 0) return Uint8List(0);
+          final out = arena<ffi.Pointer<ffi.Uint8>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Uint8List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.int8:
+          if (count == 0) return Int8List(0);
+          final out = arena<ffi.Pointer<ffi.Int8>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Int8List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.uint16:
+          if (count == 0) return Uint16List(0);
+          final out = arena<ffi.Pointer<ffi.Uint16>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Uint16List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.int16:
+          if (count == 0) return Int16List(0);
+          final out = arena<ffi.Pointer<ffi.Int16>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Int16List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.uint32:
+          if (count == 0) return Uint32List(0);
+          final out = arena<ffi.Pointer<ffi.Uint32>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Uint32List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.int32:
+          if (count == 0) return Int32List(0);
+          final out = arena<ffi.Pointer<ffi.Int32>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Int32List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.uint64:
+          if (count == 0) return Uint64List(0);
+          final out = arena<ffi.Pointer<ffi.Uint64>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Uint64List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.int64:
+          if (count == 0) return Int64List(0);
+          final out = arena<ffi.Pointer<ffi.Int64>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Int64List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.float:
+          if (count == 0) return Float32List(0);
+          final out = arena<ffi.Pointer<ffi.Float>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Float32List.fromList(data.asTypedList(count));
+        case ONNXTensorElementDataType.double:
+          if (count == 0) return Float64List(0);
+          final out = arena<ffi.Pointer<ffi.Double>>();
+          final data = _getTensorMutableData(_ptr, out);
+          return Float64List.fromList(data.asTypedList(count));
+        default:
+          throw UnsupportedError('TypedData extraction is not supported for '
+              '${_info._tensorElementType}.');
+      }
+    });
+  }
+
   ONNXTensorElementDataType get elementType {
     _checkNotReleased();
     return _info._tensorElementType;

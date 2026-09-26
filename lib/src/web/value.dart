@@ -21,6 +21,35 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  /// Returns a flat, independent numeric copy which survives release().
+  /// Web cannot return Int64List/Uint64List; those types throw UnsupportedError.
+  /// Bool, string, half-precision and complex values are also unsupported.
+  TypedData toTypedData() {
+    _check();
+    final data = _tensor.data;
+    switch (_tensor.type.toDart) {
+      case 'uint8':
+        return Uint8List.fromList((data as JSUint8Array).toDart);
+      case 'int8':
+        return Int8List.fromList((data as JSInt8Array).toDart);
+      case 'uint16':
+        return Uint16List.fromList((data as JSUint16Array).toDart);
+      case 'int16':
+        return Int16List.fromList((data as JSInt16Array).toDart);
+      case 'uint32':
+        return Uint32List.fromList((data as JSUint32Array).toDart);
+      case 'int32':
+        return Int32List.fromList((data as JSInt32Array).toDart);
+      case 'float32':
+        return Float32List.fromList((data as JSFloat32Array).toDart);
+      case 'float64':
+        return Float64List.fromList((data as JSFloat64Array).toDart);
+      default:
+        throw UnsupportedError('TypedData extraction is not supported on Web '
+            'for ${_tensor.type.toDart}.');
+    }
+  }
+
   List<int> get shape {
     _check();
     return List.unmodifiable(_tensor.dims.toDart.map((d) => d.toDartInt));

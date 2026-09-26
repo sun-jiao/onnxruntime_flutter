@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add independently owned flat numeric tensor copies through toTypedData on native and Web, preserving legacy value extraction.
+
 - Add runAsyncOrThrow and structured asynchronous inference diagnostics without changing legacy empty-list failures.
 
 - Add opt-in model input/output descriptions, tensor shape/type getters and input validation on native and Web backends.

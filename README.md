@@ -239,3 +239,26 @@ release. Keep input tensors and run options alive until their futures complete,
 and release each returned output. Existing `runAsync` still returns `[]` on
 failure; `run` keeps its original exceptions. No automatic input validation is
 added by the strict API; call `validateInputs` explicitly if desired.
+
+### Flat TypedData output
+
+`OrtValueTensor.toTypedData()` copies numeric tensor data directly to a flat
+Dart typed list, without building nested Lists. For example:
+
+```dart
+final tensor = outputs.first as OrtValueTensor;
+final shape = tensor.shape;
+final data = tensor.toTypedData() as Float32List; // For a float32 output.
+tensor.release();
+print(data); // The independent copy remains valid.
+```
+
+The returned type matches the tensor: Float32List, Float64List, or signed/unsigned
+8/16/32/64-bit integer lists. Web supports the same types except Int64List and
+Uint64List, which throw `UnsupportedError`; use the existing `value` getter for
+Web int64/uint64 values within its documented exact integer range. Bool, string,
+Float16/BFloat16 and complex tensors throw `UnsupportedError` in this new API.
+Scalars return a one-element typed list; empty tensors return an empty typed
+list. Each call owns a separate buffer and may be modified independently.
+Calling after tensor release throws `StateError`. The existing `value` getter
+retains its scalar/nested-list representation and behavior.
