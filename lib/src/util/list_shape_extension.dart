@@ -30,6 +30,14 @@ extension ListShape on List {
       }
     }
 
+    if (dims > 5 && shape.contains(0)) {
+      // Empty tensors still retain the dimensions before the first zero.
+      // Grouping by a zero-sized dimension below would never advance.
+      List emptyDimension(int dimension) =>
+          List.generate(shape[dimension], (_) => emptyDimension(dimension + 1));
+      return emptyDimension(0);
+    }
+
     var reshapedList = flatten<dynamic>();
 
     /// dims > 5
