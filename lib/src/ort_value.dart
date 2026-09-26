@@ -624,6 +624,10 @@ class OrtValueSequence extends OrtValue {
   @override
   List<OrtValue>? get value {
     _checkNotReleased();
+    // Empty sequences have no first element from which to infer a child type.
+    if (_valueCount == 0) {
+      return <OrtValue>[];
+    }
     return usingNative((arena) {
       var transferred = false;
       if (_onnxType == ONNXType.map) {

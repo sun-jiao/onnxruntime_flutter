@@ -70,6 +70,11 @@ per-request failures returning `[]`, recovery and caller-owned input lifetimes.
 Sequence Identity uses opset 16; the other input fixtures use opset 13. Sparse
 outputs retain their existing `null` value representation.
 
+The `empty_sequence.onnx` fixture uses SequenceEmpty to verify that empty
+sequences return fresh empty lists through direct/address wrappers and concurrent
+asynchronous inference, including reuse as an input. Mixed tensor output ordering
+and rejection of reads after release remain covered.
+
 Metadata regressions use `fixtures/metadata.onnx` to preserve normal, empty,
 Unicode and NUL-terminated values, and the existing `UnsupportedError` for a
 missing key. A separate C API fixture counts metadata/string destruction and

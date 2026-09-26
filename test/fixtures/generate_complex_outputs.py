@@ -94,3 +94,8 @@ model('map_input', [node('Identity', ['tensor_input'], 'tensor')],
 sparse = message(8, integer(1, 1) + message(2,
     message(1, integer(1, 2)) + message(1, integer(1, 2))))
 model('sparse_input', [], [('input', sparse)], inputs=[('input', sparse)])
+
+model('empty_sequence', [
+    node('SequenceEmpty', [], 'sequence'),
+    node('Identity', ['input'], 'tensor'),
+], [('sequence', sequence), ('tensor', tensor_type([1, 2]))])
