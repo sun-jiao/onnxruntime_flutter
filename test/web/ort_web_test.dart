@@ -5,6 +5,7 @@ import '../model_info_checks.dart';
 import '../strict_async_checks.dart';
 import '../typed_data_checks.dart';
 import '../lifecycle_checks.dart';
+import '../realtime_checks.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -153,6 +154,13 @@ void main() {
       await expectLater(session.initialize(), throwsA(anything));
       await expectLater(session.ready, throwsA(anything));
     } finally { await session.closeAsync(); }
+  });
+
+  test('real-time browser inference and backpressure', () async {
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
+    options.release();
+    await checkRealtime(session);
   });
 
   test('runtime, providers, options and unsupported native operations', () {

@@ -342,3 +342,24 @@ creation failure propagates; with fallback enabled, initialization retries WASM.
 This does not retry already-started inference on another backend. The selected
 backend does not imply every operator ran on GPU. GPU hardware support still
 requires target-browser/device validation.
+
+### Real-time inference queues
+
+`OrtRealtimeSession(session, maxPending: 1, policy: OrtQueuePolicy.keepLatest)`
+serializes `enqueue(runOptions, inputs)` requests and returns tickets with `id`,
+`result` and `cancel()`. The default policy keeps the active request plus only the
+latest pending frame. `dropOldest` preserves a bounded FIFO, and `rejectNew`
+drops incoming requests when full. Capacity excludes the active request.
+
+Each ticket settles with `completed` (caller-owned output values), `dropped` or
+`cancelled` (no outputs); inference failures reject that ticket without stopping
+the queue. Cancellation only removes pending work. Keep inputs/options alive
+until their tickets settle, then release them; release every completed output.
+Camera/audio stream listeners can enqueue immediately and consume ticket futures
+without awaiting one frame before accepting the next. `OrtTaskQueue<T>` exposes
+the same policy for custom pre/postprocessing pipelines.
+
+`closeAsync()` drains by default; `closeAsync(cancelPending: true)` cancels queued
+work and waits for active work. `closeSession: true` additionally awaits session
+shutdown. Default queues leave the supplied session caller-owned. There is no
+promise of forcibly interrupting an executing native or browser inference.

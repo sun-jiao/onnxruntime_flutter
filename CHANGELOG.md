@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add bounded real-time inference queues with drop policies, pending cancellation and drainable shutdown.
+
 - Add explicit session initialization, WebGPU adapter probing, backend selection and observable WASM fallback.
 
 - Add typed provider configurations, atomic native registration, fallback reports and runtime capabilities.
