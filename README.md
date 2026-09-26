@@ -316,3 +316,29 @@ backend and profiling-file support. Availability means compiled into the runtime
 not that hardware/backend dependencies work or that every model operator runs
 there. These policies govern registration, not ORT's internal per-operator CPU
 fallback. Existing append methods and `availableProviders()` retain their behavior.
+
+### Explicit initialization and WebGPU
+
+`await session.initialize()` (also `session.ready`) validates/initializes Web
+models without running inference. Concurrent calls share the session queue;
+accepted initialization is drained by `closeAsync`. Errors reject the future
+and later requests may retry. Native sessions initialize in their constructors,
+so this method simply checks that the session is still open.
+
+For WebGPU, call `options.setWebOptions(const OrtWebOptions(backend:
+OrtWebBackend.webgpu, fallbackToWasm: true))` before constructing the session.
+Load `ort.webgpu.min.js` from the pinned onnxruntime-web 1.23.2 distribution
+instead of `ort.min.js`, serve the matching
+`ort-wasm-simd-threaded.asyncify.mjs` and `.wasm` assets, and use HTTPS/localhost.
+Disable `ort.env.wasm.proxy` for WebGPU. These options are Web-only; setting them
+on native options throws UnsupportedError. Existing default sessions still use
+WASM and initialize lazily.
+
+`await OrtEnv.instance.probeWebGpu()` checks browser adapter availability.
+It cannot prove the loaded script includes WebGPU or a model is supported.
+After initialization, `session.webInitialization` reports requested/selected
+backends and the fallback reason. With fallback disabled, adapter or GPU session
+creation failure propagates; with fallback enabled, initialization retries WASM.
+This does not retry already-started inference on another backend. The selected
+backend does not imply every operator ran on GPU. GPU hardware support still
+requires target-browser/device validation.

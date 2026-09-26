@@ -155,3 +155,10 @@ and cover tensor shapes/copies, metadata, concurrent first runs, release during
 accepted runs, failure/recovery and unsupported native operations. CI also builds
 the example for Web. Safari, Firefox, GPU providers, multi-threading, proxy workers
 and full-width 64-bit integers are not claimed by this test suite.
+
+The additive API tests cover awaitable shutdown, resource cleanup, profiling,
+benchmark statistics, provider configuration, explicit Web initialization and
+backend fallback. Run `python3 tool/run_web_tests.py --webgpu` to load the
+WebGPU-capable distribution; tests probe the adapter and check initialization or
+WASM fallback. Backend-selection unit tests inject GPU success/failure. A passing
+headless run does not by itself establish hardware GPU coverage.

@@ -1,3 +1,4 @@
+import 'ort_web_options.dart';
 import 'ort_provider_config.dart';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
@@ -94,6 +95,9 @@ class OrtEnv {
   /// Gets all available providers.
   List<OrtProvider> availableProviders() => availableProviderNames()
       .map(OrtProvider.valueOf).toList();
+
+  Future<OrtWebGpuAvailability> probeWebGpu() async =>
+      const OrtWebGpuAvailability(false, 'WebGPU browser probing is only available on Web.');
 
   OrtRuntimeCapabilities get capabilities => OrtRuntimeCapabilities(
       version, 'native', availableProviderNames(), profilingFile: true);

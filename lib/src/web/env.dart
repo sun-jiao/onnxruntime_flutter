@@ -52,6 +52,18 @@ class OrtEnv {
           .toDart;
   Object get ptr => _nativeOnly('OrtEnv.ptr');
   Object get ortApiPtr => _nativeOnly('OrtEnv.ortApiPtr');
+  /// Adapter availability is not proof that the loaded ORT script supports GPU.
+  Future<OrtWebGpuAvailability> probeWebGpu() async {
+    try {
+      final gpu = _navigator.getProperty<JSObject?>('gpu'.toJS);
+      if (gpu == null) return const OrtWebGpuAvailability(false, 'navigator.gpu is unavailable; a secure context is required.');
+      final adapter = await gpu.callMethod<JSPromise<JSObject?>>('requestAdapter'.toJS).toDart;
+      return adapter == null
+          ? const OrtWebGpuAvailability(false, 'No WebGPU adapter is available.')
+          : const OrtWebGpuAvailability(true);
+    } catch (error) { return OrtWebGpuAvailability(false, error.toString()); }
+  }
+
   List<OrtProvider> availableProviders() => [OrtProvider.cpu];
   List<String> availableProviderNames() => [OrtProvider.cpu.value];
   OrtRuntimeCapabilities get capabilities => OrtRuntimeCapabilities(

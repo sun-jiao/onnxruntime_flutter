@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show debugPrint;
 import '../ort_provider.dart';
 import '../ort_provider_config.dart';
+import '../ort_web_options.dart';
 import '../providers/ort_flags.dart';
 import '../util/list_shape_extension.dart';
 import 'model_info.dart';
@@ -89,3 +90,6 @@ class OrtStatus {
     if (ptr != null) _nativeOnly('OrtStatus.checkOrtStatus');
   }
 }
+
+@JS('navigator')
+external JSObject get _navigator;

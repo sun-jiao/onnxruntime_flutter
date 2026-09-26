@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add explicit session initialization, WebGPU adapter probing, backend selection and observable WASM fallback.
+
 - Add typed provider configurations, atomic native registration, fallback reports and runtime capabilities.
 
 - Add ORT profiling controls and cross-platform benchmark reports with warmup and percentile timings.

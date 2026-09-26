@@ -1,3 +1,4 @@
+import 'ort_web_options.dart';
 import 'ort_provider_config.dart';
 import 'ort_model_info.dart';
 import 'util/session_type_info.dart';
@@ -357,6 +358,11 @@ class OrtSession {
 
   /// Ends profiling after all outstanding runs have been awaited.
   /// Returns the native JSON trace path, or null if profiling was disabled.
+  /// Native construction initializes immediately; this validates lifecycle.
+  Future<void> initialize() async { _checkNotReleased(); }
+  Future<void> get ready => initialize();
+  OrtWebInitializationInfo? get webInitialization => null;
+
   String? endProfiling() {
     _checkNotReleased();
     return usingNative((arena) {
@@ -452,6 +458,11 @@ class OrtSessionOptions {
     _released = true;
     OrtEnv.instance.ortApiPtr.ref.ReleaseSessionOptions
         .asFunction<void Function(ffi.Pointer<bg.OrtSessionOptions>)>()(_ptr);
+  }
+
+  void setWebOptions(OrtWebOptions options) {
+    _checkNotReleased();
+    throw UnsupportedError('Web backend options require a browser session.');
   }
 
   /// Enables a JSON trace file prefixed with [prefix]. Configure before loading.

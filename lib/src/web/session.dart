@@ -6,6 +6,9 @@ class OrtSession {
   Uint8List? _model;
   late final ModelInfo _info;
   late final JSObject _options;
+  late final OrtWebOptions _webOptions;
+  OrtWebInitializationInfo? _webInitialization;
+  OrtWebInitializationInfo? get webInitialization => _webInitialization;
   int? _threads;
   _Session? _session;
   int _nextRequestId = 0;
@@ -26,6 +29,7 @@ class OrtSession {
             }.jsify()
             as JSObject;
     _threads = options._threads;
+    _webOptions = options._webOptions;
   }
 
   OrtSession.fromFile(File modelFile, OrtSessionOptions options) {
@@ -122,6 +126,43 @@ class OrtSession {
     return result;
   }
 
+  /// Initializes the model without inference, sharing the serialized queue.
+  Future<void> initialize() async {
+    _check();
+    final result = _tail.then((_) => _ensureSession());
+    _tail = result.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    return result;
+  }
+  Future<void> get ready => initialize();
+
+  Future<void> _ensureSession() async {
+    if (_session != null) return;
+        final env = OrtEnv.instance;
+        final wasm = _runtime
+            .getProperty<JSObject>('env'.toJS)
+            .getProperty<JSObject>('wasm'.toJS);
+        final configured =
+            wasm.getProperty<JSNumber?>('numThreads'.toJS)?.toDartInt;
+        final count =
+            _threads ??
+            env._threads ??
+            ((configured == null || configured == 0) ? 1 : configured);
+        env._configureThreads(count);
+        env._threads = count;
+    final result = await createWebBackend<_Session>(_webOptions,
+        OrtEnv.instance.probeWebGpu, (backend) async {
+      if (backend == OrtWebBackend.webgpu &&
+          (wasm.getProperty<JSBoolean?>('proxy'.toJS)?.toDart ?? false)) {
+        throw UnsupportedError('WebGPU cannot use the WASM proxy worker.');
+      }
+      _options.setProperty('executionProviders'.toJS, [backend.name].jsify());
+      return _createSession(_model!.toJS, _options).toDart;
+    });
+    _session = result.session;
+    _webInitialization = result.info;
+    _model = null;
+  }
+
   Future<List<OrtValue?>> _run(
     OrtRunOptions runOptions,
     Map<String, OrtValue> inputs,
@@ -145,22 +186,7 @@ class OrtSession {
           (entry.value as OrtValueTensor)._tensor,
         );
       }
-      if (_session == null) {
-        final env = OrtEnv.instance;
-        final wasm = _runtime
-            .getProperty<JSObject>('env'.toJS)
-            .getProperty<JSObject>('wasm'.toJS);
-        final configured =
-            wasm.getProperty<JSNumber?>('numThreads'.toJS)?.toDartInt;
-        final count =
-            _threads ??
-            env._threads ??
-            ((configured == null || configured == 0) ? 1 : configured);
-        env._configureThreads(count);
-        env._threads = count;
-        _session = await _createSession(_model!.toJS, _options).toDart;
-        _model = null;
-      }
+      await _ensureSession();
       if (runOptions._terminated) throw StateError('Run has been terminated.');
       result =
           await _session!
@@ -252,6 +278,8 @@ class OrtIsolateSession {
 }
 
 class OrtSessionOptions {
+  OrtWebOptions _webOptions = const OrtWebOptions();
+  void setWebOptions(OrtWebOptions options) { _check(); _webOptions = options; }
   bool _released = false;
   int? _threads;
   final Map<String, Object> _values = {};

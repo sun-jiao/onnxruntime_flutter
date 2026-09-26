@@ -42,7 +42,7 @@ void main() {
       'createElement'.toJS,
       'script'.toJS,
     );
-    script.setProperty('src'.toJS, '$_base/ort.min.js'.toJS);
+    script.setProperty('src'.toJS, '$_base/${const String.fromEnvironment('ORT_WEB_SCRIPT', defaultValue: 'ort.min.js')}'.toJS);
     script.setProperty('onload'.toJS, (() => loaded.complete()).toJS);
     script.setProperty(
       'onerror'.toJS,
@@ -117,6 +117,42 @@ void main() {
       expect(OrtEnv.instance.capabilities.backend, 'web');
       expect(OrtEnv.instance.capabilities.profilingFile, isFalse);
     } finally { options.release(); }
+  });
+
+  test('explicit initialization, GPU selection/fallback and close ordering', () async {
+    final options = OrtSessionOptions()..setWebOptions(const OrtWebOptions(backend: OrtWebBackend.webgpu));
+    final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
+    options.release();
+    final initializing = Future.wait([session.initialize(), session.ready]);
+    session.release();
+    await initializing;
+    await session.closeAsync();
+    expect(session.webInitialization, isNotNull);
+    expect(session.webInitialization!.requested, OrtWebBackend.webgpu);
+    if (session.webInitialization!.selected == OrtWebBackend.wasm) {
+      expect(session.webInitialization!.fallbackReason, isNotEmpty);
+    }
+    await expectLater(session.initialize(), throwsStateError);
+  });
+
+  test('explicit initialization surfaces model operator errors before inference', () async {
+    final bytes = await _model('metadata.onnx');
+    final op = utf8.encode('Identity');
+    var replaced = false;
+    for (var i = 0; i <= bytes.length - op.length; i++) {
+      if (List.generate(op.length, (j) => bytes[i + j] == op[j]).every((v) => v)) {
+        bytes.setRange(i, i + op.length, utf8.encode('BadOp___'));
+        replaced = true; break;
+      }
+    }
+    expect(replaced, isTrue);
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(bytes, options);
+    options.release();
+    try {
+      await expectLater(session.initialize(), throwsA(anything));
+      await expectLater(session.ready, throwsA(anything));
+    } finally { await session.closeAsync(); }
   });
 
   test('runtime, providers, options and unsupported native operations', () {

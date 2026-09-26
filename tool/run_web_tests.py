@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = '1.23.2'
 SHA256 = '0b8707d7efab9a2bea63564d66cad79e897cfd0bd627e5ae000488ffc1c45c7d'
 URL = f'https://registry.npmjs.org/onnxruntime-web/-/onnxruntime-web-{VERSION}.tgz'
-FILES = ('ort.min.js', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm')
+FILES = ('ort.min.js', 'ort.webgpu.min.js', 'ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm', 'ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm')
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -36,6 +36,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runtime-archive', type=Path)
+    parser.add_argument('--webgpu', action='store_true', help='Load the WebGPU-capable distribution')
     args = parser.parse_args()
     cache = ROOT / '.dart_tool' / 'ort_web' / VERSION
     cache.mkdir(parents=True, exist_ok=True)
@@ -72,6 +73,7 @@ def main():
         return subprocess.run([
             flutter, 'test', '--no-pub', '--platform', 'chrome',
             f'--dart-define=ORT_WEB_URL=http://127.0.0.1:{server.server_port}',
+            f'--dart-define=ORT_WEB_SCRIPT={"ort.webgpu.min.js" if args.webgpu else "ort.min.js"}',
             '--reporter', 'expanded', 'test/web',
         ], cwd=ROOT).returncode
     finally:
