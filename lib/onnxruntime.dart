@@ -1,8 +1,6 @@
 library onnxruntime;
 
-export 'src/ort_env.dart';
+export 'src/ort_native.dart'
+    if (dart.library.js_interop) 'src/web/ort_web.dart';
 export 'src/ort_provider.dart';
-export 'src/ort_session.dart';
-export 'src/ort_status.dart';
-export 'src/ort_value.dart';
 export 'src/providers/ort_flags.dart';

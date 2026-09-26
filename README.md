@@ -5,12 +5,12 @@
 
 ## Overview
 
-Flutter plugin for OnnxRuntime via `dart:ffi` provides an easy, flexible, and fast Dart API to integrate Onnx models in flutter apps across mobile and desktop platforms.
+Flutter plugin for OnnxRuntime via native FFI and WebAssembly provides an easy, flexible, and fast Dart API to integrate Onnx models in flutter apps across mobile, desktop, and web platforms.
 
-| **Platform**      | Android       | iOS | Linux | macOS | Windows |
-|-------------------|---------------|-----|-------|-------|---------|
-| **Compatibility** | API level 24+ | 15.1+ | glibc 2.28+ | 13.4+ | *       |
-| **Architecture**  | arm32/arm64/x86/x64 | * | x64/arm64 | x64/arm64 | x64/arm64 |
+| **Platform**      | Android       | iOS | Linux | macOS | Windows | Web |
+|-------------------|---------------|-----|-------|-------|---------|-----|
+| **Compatibility** | API level 24+ | 15.1+ | glibc 2.28+ | 13.4+ | *       | Modern browsers |
+| **Architecture**  | arm32/arm64/x86/x64 | * | x64/arm64 | x64/arm64 | x64/arm64 | WASM CPU |
 
 *: [Consistent with Flutter](https://docs.flutter.dev/reference/supported-platforms)
 
@@ -21,7 +21,7 @@ first build needs network access or a prefilled cache. See
 
 ## Key Features
 
-* Multi-platform Support for Android, iOS, Linux, macOS, Windows, and Web(Coming soon).
+* Multi-platform Support for Android, iOS, Linux, macOS, Windows, and Web (WASM CPU).
 * Flexibility to use any Onnx Model.
 * Acceleration using multi-threading.
 * Similar structure as OnnxRuntime Java and C# API.
@@ -91,6 +91,91 @@ outputs?.forEach((element) {
 OrtEnv.instance.release();
 ```
 
+
+### Web setup
+
+Web uses [ONNX Runtime Web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html)
+1.23.2 with the WebAssembly CPU backend. The public import, synchronous
+`OrtSession.fromBuffer` constructor, tensor factories, options, `runAsync`, and
+`release` calls stay the same. Native platforms continue using the existing FFI
+implementation.
+
+Load the runtime **before** Flutter in your application's `web/index.html`:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.min.js"></script>
+<script>
+  ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
+  ort.env.wasm.numThreads = 1;
+</script>
+<script src="flutter_bootstrap.js" async></script>
+```
+
+For offline deployments or a restrictive CSP, host `ort.min.js`,
+`ort-wasm-simd-threaded.jsep.mjs`, and `ort-wasm-simd-threaded.jsep.wasm` from that
+same npm package/version on your own server and change both URLs. Serve `.mjs`
+as JavaScript and `.wasm` as `application/wasm`. A different runtime version is
+not covered by the regression tests. No model data is uploaded by this library.
+
+Load ONNX model bytes using `rootBundle.load` or HTTP, then use the existing API:
+
+```dart
+final asset = await rootBundle.load('assets/models/model.onnx');
+final options = OrtSessionOptions();
+final session = OrtSession.fromBuffer(
+  asset.buffer.asUint8List(asset.offsetInBytes, asset.lengthInBytes), options);
+options.release();
+final input = OrtValueTensor.createTensorWithDataList(
+  Float32List.fromList([1, 2]), [1, 2]);
+final runOptions = OrtRunOptions();
+try {
+  final outputs = await session.runAsync(runOptions, {'input': input});
+  try {
+    // Inspect outputs; an empty list indicates an asynchronous inference error.
+    print(outputs?.map((output) => output?.value).toList());
+  } finally {
+    outputs?.forEach((output) => output?.release());
+  }
+} finally {
+  input.release();
+  runOptions.release();
+  session.release();
+}
+```
+
+Web compatibility details:
+
+- `run()` keeps its signature but throws `UnsupportedError` on Web: the upstream
+  JavaScript inference API is asynchronous. Use `runAsync()` on shared code paths.
+  The first run also initializes the WASM session. Errors are logged and return
+  `[]`, matching the native asynchronous API. Accepted runs finish before release.
+- Input/output names, counts and custom metadata are available immediately from
+  ONNX protobuf bytes. ORT-format models and external weight files are not
+  supported by this constructor on Web. Full model/operator validation happens
+  during the first run.
+- Numeric, boolean and string tensors are supported. Use typed lists such as
+  `Float32List` or `Int32List` to select a numeric type explicitly. Plain
+  `List<int>` becomes int64. JavaScript Dart cannot represent every 64-bit integer;
+  inputs/outputs outside ±9007199254740991 throw instead of silently rounding.
+  Dart `Int64List`/`Uint64List` construction itself is unavailable in JS builds.
+  Float16/BFloat16 value extraction, sequences, maps and sparse tensors are not
+  supported by this Web adapter.
+- Native pointers, addresses, `fromFile`, and isolate construction have no browser
+  equivalent and throw `UnsupportedError`. `isolateSession` is `null`. WASM CPU is
+  reported as `OrtProvider.cpu`; other existing provider append methods return
+  `false`. No GPU provider is exposed through the existing API.
+- Thread count is global to the Web runtime, fixed when the first session starts.
+  Configure it in HTML or before the first run. One thread works without special
+  HTTP headers; multiple threads require browser cross-origin isolation (COOP /
+  COEP). Native affinity/spinning controls are unsupported. `setTerminate()` stops
+  queued runs using those options; it cannot interrupt JavaScript already running.
+- The browser adapter does not create a Dart isolate. Inference can occupy the
+  main thread; configuring ONNX Runtime's `ort.env.wasm.proxy = true` before
+  initialization moves WASM work to its worker (subject to your hosting/CSP setup).
+
+The example includes a Web entry point: run `flutter run -d chrome` from
+`example/`. Browser inference regression tests run with
+`python3 tool/run_web_tests.py`; see [test instructions](test/README.md).
 
 ### QNN execution provider
 

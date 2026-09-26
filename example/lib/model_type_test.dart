@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:onnxruntime/onnxruntime.dart';
 
 class ModelTypeTest {
@@ -10,7 +11,7 @@ class ModelTypeTest {
   }
 
   static Future<List<OrtValue?>> testInt64() {
-    return testType(Int64List.fromList([1, 2, -3, -9223372036854775808, 9223372036854775807]), [1, 5], 'assets/models/test_types_INT64.pb');
+    return testType(kIsWeb ? <int>[1, 2, -3, -9007199254740991, 9007199254740991] : Int64List.fromList([1, 2, -3, -9223372036854775808, int.parse('9223372036854775807')]), [1, 5], 'assets/models/test_types_INT64.pb');
   }
 
   static Future<List<OrtValue?>> testBool() {
@@ -30,7 +31,7 @@ class ModelTypeTest {
     final runOptions = OrtRunOptions();
     final inputOrt = OrtValueTensor.createTensorWithDataList(data, shape);
     final inputs = {'input': inputOrt};
-    final outputs = session.run(runOptions, inputs);
+    final outputs = await session.runAsync(runOptions, inputs)!;
     inputOrt.release();
     runOptions.release();
     sessionOptions.release();

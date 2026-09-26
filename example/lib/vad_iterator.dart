@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:onnxruntime/onnxruntime.dart';
 
 class VadIterator {
@@ -75,7 +76,7 @@ class VadIterator {
     final runOptions = OrtRunOptions();
     final inputs = {'input': inputOrt, 'sr': srOrt, 'h': hOrt, 'c': cOrt};
     final List<OrtValue?>? outputs;
-    if (concurrent) {
+    if (concurrent || kIsWeb) {
       outputs = await _session?.runAsync(runOptions, inputs);
     } else {
       outputs = _session?.run(runOptions, inputs);

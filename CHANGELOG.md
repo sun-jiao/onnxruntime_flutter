@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Add a conditional ONNX Runtime Web WASM backend while retaining the native Dart API.
+- Support existing asynchronous tensor inference, model names/metadata and release calls on Web.
+- Add a runnable Web example and browser regression tests; document Web-specific limitations.
+
+## Unreleased
+
 * Upgrade ONNX Runtime to 1.30.0 on Android, iOS, Linux and Windows; upgrade macOS to 1.23.2 universal2 to retain Intel support.
 * Require Android API 24+, iOS 15.1+, macOS 13.4+, and Linux glibc 2.28+.
 * Update the Android example to AGP 8.13.2, Gradle 8.14.4, Kotlin 2.3.21 and JVM 17; verify 16 KB native alignment.

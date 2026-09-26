@@ -9,6 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: python3 tool/run_web_tests.py
+      - run: flutter build web --release
+        working-directory: example
+
   android-build:
     runs-on: ubuntu-24.04
     timeout-minutes: 30

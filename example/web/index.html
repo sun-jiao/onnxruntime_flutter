@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="ONNX Runtime Flutter Web example">
+  <title>ONNX Runtime Flutter</title>
+</head>
+<body>
+  <!-- Keep the JavaScript and WASM versions identical. These files may also be
+       hosted locally; see the library README's Web setup section. -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/ort.min.js"></script>
+  <script>
+    ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/';
+    ort.env.wasm.numThreads = 1;
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

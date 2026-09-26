@@ -140,3 +140,18 @@ runner failure propagation and fixture reproducibility.
 Windows ARM64 and mobile device inference still need target-device validation.
 Analysis treats errors and warnings as failures while retaining existing info
 level documentation lints. CI does not publish packages or modify native pins.
+
+## Web regression tests
+
+Run `python3 tool/run_web_tests.py` after `flutter pub get`. Chrome must be on
+PATH, or set `CHROME_EXECUTABLE` to a Chromium-based browser. The runner downloads
+the official ONNX Runtime Web 1.23.2 npm tarball, verifies its SHA-256, and serves
+its JS/WASM files and fixture models locally. `--runtime-archive path/to/file.tgz`
+accepts a predownloaded copy for offline runs. The browser tests are marked
+`@TestOn('browser')` so the existing native runner skips them.
+
+Tests execute real WASM inference, including strings, booleans and int64 values,
+and cover tensor shapes/copies, metadata, concurrent first runs, release during
+accepted runs, failure/recovery and unsupported native operations. CI also builds
+the example for Web. Safari, Firefox, GPU providers, multi-threading, proxy workers
+and full-width 64-bit integers are not claimed by this test suite.
