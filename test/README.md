@@ -67,8 +67,7 @@ inference, concurrent requests, mixed tensor/sequence outputs, output ordering,
 and sequences of maps. Regenerate them with
 `python3 test/fixtures/generate_complex_outputs.py` (no extra dependencies).
 SparseTensor retains its existing `value` behavior: initialized sparse formats
-return `null`; an undefined format throws. This change does not introduce a new
-sparse-data representation.
+return `null`; an undefined format throws. The new `toSparseData()` API separately exposes copied sparse values and indices.
 
 Complex-input regressions use `sequence_input.onnx`, `map_input.onnx` and
 `sparse_input.onnx` to compare synchronous and asynchronous inference. They cover
@@ -162,3 +161,10 @@ backend fallback. Run `python3 tool/run_web_tests.py --webgpu` to load the
 WebGPU-capable distribution; tests probe the adapter and check initialization or
 WASM fallback. Backend-selection unit tests inject GPU success/failure. A passing
 headless run does not by itself establish hardware GPU coverage.
+
+Half/complex additions have explicit tests for Float16/BFloat16 bits, rounding,
+nonfinite values, real native half-precision inference, real Web Float16 inference,
+source/parent release ownership, COO/CSR inference snapshots, block-sparse
+values/index shapes and empty sparse tensors. Legacy value extraction regressions
+remain enabled. BFloat16/complex/sparse Web limitations are explicit; no new GPU
+or mobile hardware numerical coverage is implied.

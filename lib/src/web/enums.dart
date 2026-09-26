@@ -1,29 +1,5 @@
 part of 'ort_web.dart';
 
-enum OrtSparseFormat {
-  undefined(0),
-  coo(1),
-  csrc(2),
-  blockSparse(4);
-
-  final int value;
-
-  const OrtSparseFormat(this.value);
-
-  static OrtSparseFormat valueOf(int type) {
-    switch (type) {
-      case 1:
-        return OrtSparseFormat.coo;
-      case 2:
-        return OrtSparseFormat.csrc;
-      case 4:
-        return OrtSparseFormat.blockSparse;
-      default:
-        return OrtSparseFormat.undefined;
-    }
-  }
-}
-
 enum OrtApiVersion {
   /// The initial release of the ORT API.
   api1(1),

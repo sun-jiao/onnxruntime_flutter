@@ -107,3 +107,9 @@ model('dynamic_identity', [node('Identity', ['input'], 'output')],
       [('output', dynamic_type)], inputs=[('input', dynamic_type)])
 model('scalar_identity', [node('Identity', ['input'], 'output')],
       [('output', tensor_type([]))], inputs=[('input', tensor_type([]))])
+
+# Half precision Identity fixtures retain tensor bits through native/Web inference.
+for name, dtype in [('float16', 10), ('bfloat16', 16)]:
+    half_type = message(1, integer(1, dtype) + message(2, message(1, integer(1, 2))))
+    model(name + '_identity', [node('Identity', ['input'], 'output')],
+          [('output', half_type)], inputs=[('input', half_type)])

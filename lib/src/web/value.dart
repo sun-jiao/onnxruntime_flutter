@@ -21,6 +21,28 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  factory OrtValueTensor.fromFloat16Bits(Uint16List bits, List<int> shape) {
+    validateTensorShape(shape, bits.length);
+    return OrtValueTensor._('float16', Uint16List.fromList(bits).toJS, shape);
+  }
+  factory OrtValueTensor.fromBFloat16Bits(Uint16List bits, List<int> shape) =>
+      throw UnsupportedError('The pinned ORT Web runtime does not support BFloat16 tensors.');
+  factory OrtValueTensor.fromFloat16(List<double> values, List<int> shape) =>
+      OrtValueTensor.fromFloat16Bits(encodeHalf(values, bfloat: false), shape);
+  factory OrtValueTensor.fromBFloat16(List<double> values, List<int> shape) =>
+      OrtValueTensor.fromBFloat16Bits(encodeHalf(values, bfloat: true), shape);
+  Uint16List toHalfBits() {
+    _check();
+    if (_tensor.type.toDart != 'float16') throw UnsupportedError('Not a Float16 tensor.');
+    // ORT may return Uint16Array or native Float16Array. Reinterpret the buffer.
+    final array = _tensor.data as JSObject;
+    final buffer = array.getProperty<JSArrayBuffer>('buffer'.toJS).toDart;
+    final offset = array.getProperty<JSNumber>('byteOffset'.toJS).toDartInt;
+    final length = array.getProperty<JSNumber>('length'.toJS).toDartInt;
+    return Uint16List.fromList(buffer.asUint16List(offset, length));
+  }
+  Float32List toFloat32List() => decodeHalf(toHalfBits(), bfloat: false);
+
   /// Returns a flat, independent numeric copy which survives release().
   /// Web cannot return Int64List/Uint64List; those types throw UnsupportedError.
   /// Bool, string, half-precision and complex values are also unsupported.
@@ -271,6 +293,10 @@ class OrtValueTensor extends OrtValue {
 }
 
 class OrtValueSequence extends OrtValue {
+  factory OrtValueSequence.fromTensors(List<OrtValueTensor> tensors) =>
+      throw UnsupportedError('ORT Web does not support sequence values.');
+  List<OrtValue> get elements => throw UnsupportedError('ORT Web does not support sequence values.');
+
   OrtValueSequence(Object ptr) {
     _nativeOnly('OrtValueSequence');
   }
@@ -285,6 +311,9 @@ class OrtValueSequence extends OrtValue {
 }
 
 class OrtValueMap extends OrtValue {
+  factory OrtValueMap.fromTensors(OrtValueTensor keys, OrtValueTensor values) =>
+      throw UnsupportedError('ORT Web does not support map values.');
+
   OrtValueMap(Object ptr) {
     _nativeOnly('OrtValueMap');
   }
@@ -304,6 +333,15 @@ class OrtValueMap extends OrtValue {
 }
 
 class OrtValueSparseTensor extends OrtValue {
+  factory OrtValueSparseTensor.fromCoo(TypedData values, List<int> shape, Int64List indices) =>
+      throw UnsupportedError('ORT Web does not support sparse tensors.');
+  factory OrtValueSparseTensor.fromCsr(TypedData values, List<int> shape, Int64List innerIndices, Int64List outerIndices) =>
+      throw UnsupportedError('ORT Web does not support sparse tensors.');
+  factory OrtValueSparseTensor.fromBlockSparse(TypedData values, List<int> shape,
+      List<int> valuesShape, Int32List indices, List<int> indicesShape) =>
+      throw UnsupportedError('ORT Web does not support sparse tensors.');
+  OrtSparseTensorData toSparseData() => throw UnsupportedError('ORT Web does not support sparse tensors.');
+
   OrtValueSparseTensor(Object ptr) {
     _nativeOnly('OrtValueSparseTensor');
   }

@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add explicit half-precision factories/decoding, owned native Sequence/Map factories and COO/CSR/block-sparse data snapshots.
+
 - Add bounded real-time inference queues with drop policies, pending cancellation and drainable shutdown.
 
 - Add explicit session initialization, WebGPU adapter probing, backend selection and observable WASM fallback.

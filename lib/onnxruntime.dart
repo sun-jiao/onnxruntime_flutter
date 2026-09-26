@@ -12,3 +12,4 @@ export 'src/ort_benchmark.dart';
 export 'src/ort_provider_config.dart' show OrtProviderConfig, OrtProviderFallback, OrtProviderReport, OrtRuntimeCapabilities, QnnPerformanceMode;
 export 'src/ort_web_options.dart' show OrtWebBackend, OrtWebOptions, OrtWebGpuAvailability, OrtWebInitializationInfo;
 export 'src/ort_realtime.dart';
+export 'src/ort_sparse_data.dart';

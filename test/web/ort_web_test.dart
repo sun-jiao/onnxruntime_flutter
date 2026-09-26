@@ -6,6 +6,7 @@ import '../strict_async_checks.dart';
 import '../typed_data_checks.dart';
 import '../lifecycle_checks.dart';
 import '../realtime_checks.dart';
+import '../half_checks.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -161,6 +162,14 @@ void main() {
     final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
     options.release();
     await checkRealtime(session);
+  });
+
+  test('all non-NaN half bit patterns roundtrip on JavaScript', checkHalfRoundtrip);
+  test('Float16 bit copies, conversion and platform limitations', () { checkHalf(web: true); });
+  test('Float16 real browser inference', () async {
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(await _model('float16_identity.onnx'), options);
+    options.release(); await checkHalfInference(session);
   });
 
   test('runtime, providers, options and unsupported native operations', () {

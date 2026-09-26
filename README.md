@@ -95,7 +95,7 @@ OrtEnv.instance.release();
 ### Web setup
 
 Web uses [ONNX Runtime Web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html)
-1.23.2 with the WebAssembly CPU backend. The public import, synchronous
+1.23.2 with the WebAssembly CPU backend by default. The public import, synchronous
 `OrtSession.fromBuffer` constructor, tensor factories, options, `runAsync`, and
 `release` calls stay the same. Native platforms continue using the existing FFI
 implementation.
@@ -158,12 +158,14 @@ Web compatibility details:
   `List<int>` becomes int64. JavaScript Dart cannot represent every 64-bit integer;
   inputs/outputs outside ±9007199254740991 throw instead of silently rounding.
   Dart `Int64List`/`Uint64List` construction itself is unavailable in JS builds.
-  Float16/BFloat16 value extraction, sequences, maps and sparse tensors are not
-  supported by this Web adapter.
+  `value` extraction for Float16/BFloat16, sequences, maps and sparse tensors
+  remains unsupported by this Web adapter. The new explicit Float16 decoding
+  methods are described below.
 - Native pointers, addresses, `fromFile`, and isolate construction have no browser
   equivalent and throw `UnsupportedError`. `isolateSession` is `null`. WASM CPU is
   reported as `OrtProvider.cpu`; other existing provider append methods return
-  `false`. No GPU provider is exposed through the existing API.
+  `false`. Legacy provider append methods expose no GPU backend; use the new opt-in
+  `setWebOptions` API for WebGPU.
 - Thread count is global to the Web runtime, fixed when the first session starts.
   Configure it in HTML or before the first run. One thread works without special
   HTTP headers; multiple threads require browser cross-origin isolation (COOP /
@@ -363,3 +365,40 @@ the same policy for custom pre/postprocessing pipelines.
 work and waits for active work. `closeSession: true` additionally awaits session
 shutdown. Default queues leave the supplied session caller-owned. There is no
 promise of forcibly interrupting an executing native or browser inference.
+
+### Half precision and complex values
+
+`OrtValueTensor.fromFloat16(values, shape)` and `fromBFloat16(values, shape)`
+create half-precision tensors. The corresponding `fromFloat16Bits` and
+`fromBFloat16Bits` constructors accept raw `Uint16List` data and preserve bits.
+`toHalfBits()` returns an independent raw copy; `toFloat32List()` explicitly
+decodes half-precision data to a flat Float32List. Float16 conversion uses
+round-to-nearest, ties-to-even; BFloat16 conversion first rounds to Float32.
+NaN, infinities, signed zero, subnormals and empty tensors are supported.
+The existing `value` and `toTypedData` getters/methods retain their previous
+half-precision rejection behavior. Web supports Float16 through these new APIs;
+its pinned runtime has no BFloat16 tensor type, so BFloat16 factories explicitly
+throw UnsupportedError.
+
+On native platforms, `OrtValueSequence.fromTensors(tensors)` copies a nonempty
+homogeneous list of tensors; `sequence.elements` returns individually owned
+child handles, including half-precision tensors. `OrtValueMap.fromTensors(keys,
+values)` copies equal-length vectors (ORT validates supported key/value types).
+Original tensors can be released after construction, and extracted sequence
+children can outlive their parent. Release every extracted child.
+
+`OrtValueSparseTensor.fromCoo(values, denseShape, indices)` accepts a numeric
+typed list and either linear Int64 indices or flattened coordinates.
+`fromCsr(values, denseShape, innerIndices, outerIndices)` accepts 2-D CSR data.
+`fromBlockSparse(values, denseShape, valuesShape, indices, indicesShape)` accepts
+ORT's block layout with Int32 indices. Factories copy buffers into ORT-owned
+storage; data lengths/shapes are validated before native access, with further
+format validation performed by ORT.
+
+`toSparseData()` returns independent numeric values and index buffers for COO,
+CSR and block-sparse tensors, along with dense/value/index shapes. Snapshot
+buffers survive tensor release. Half-precision sparse values use raw Uint16 bits;
+sparse string/complex extraction is unsupported. The legacy sparse `value`
+getter retains its existing null/undefined-format behavior. Browser complex and
+sparse factories explicitly throw UnsupportedError because the pinned backend
+cannot represent those values.

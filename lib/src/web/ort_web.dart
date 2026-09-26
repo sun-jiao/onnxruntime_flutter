@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import '../ort_provider.dart';
 import '../ort_provider_config.dart';
 import '../ort_web_options.dart';
+import '../ort_sparse_data.dart';
+import '../util/half_float.dart';
 import '../providers/ort_flags.dart';
 import '../util/list_shape_extension.dart';
 import 'model_info.dart';

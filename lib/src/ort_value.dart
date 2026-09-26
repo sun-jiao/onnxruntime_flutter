@@ -1,3 +1,5 @@
+import 'ort_sparse_data.dart';
+import 'util/half_float.dart';
 import 'ort_types.dart';
 export 'ort_types.dart';
 import 'dart:ffi' as ffi;
@@ -10,6 +12,8 @@ import 'package:onnxruntime/src/ort_env.dart';
 import 'package:onnxruntime/src/ort_status.dart';
 import 'package:onnxruntime/src/util/list_shape_extension.dart';
 import 'package:onnxruntime/src/util/native_memory.dart';
+
+part 'ort_value_extra.dart';
 
 abstract class OrtValue {
   bool _released = false;
@@ -227,6 +231,33 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  factory OrtValueTensor.fromFloat16Bits(Uint16List bits, List<int> shape) =>
+      _halfTensor(bits, shape, ONNXTensorElementDataType.float16);
+  factory OrtValueTensor.fromBFloat16Bits(Uint16List bits, List<int> shape) =>
+      _halfTensor(bits, shape, ONNXTensorElementDataType.bFloat16);
+  factory OrtValueTensor.fromFloat16(List<double> values, List<int> shape) =>
+      OrtValueTensor.fromFloat16Bits(encodeHalf(values, bfloat: false), shape);
+  factory OrtValueTensor.fromBFloat16(List<double> values, List<int> shape) =>
+      OrtValueTensor.fromBFloat16Bits(encodeHalf(values, bfloat: true), shape);
+
+  Uint16List toHalfBits() {
+    _checkNotReleased();
+    if (elementType != ONNXTensorElementDataType.float16 &&
+        elementType != ONNXTensorElementDataType.bFloat16) {
+      throw UnsupportedError('This tensor is not a half-precision tensor.');
+    }
+    return usingNative((arena) {
+      final count = _info._tensorShapeElementCount;
+      if (count == 0) return Uint16List(0);
+      final out = arena<ffi.Pointer<ffi.Uint16>>();
+      return Uint16List.fromList(_getTensorMutableData(_ptr, out).asTypedList(count));
+    });
+  }
+
+  /// Explicit half-to-float decoding; legacy value/toTypedData stay unchanged.
+  Float32List toFloat32List() => decodeHalf(toHalfBits(),
+      bfloat: elementType == ONNXTensorElementDataType.bFloat16);
+
   /// Returns a flat, independently owned copy of numeric tensor data.
   /// The copy survives release() and modifications never affect this tensor.
   /// Bool, string, half-precision and complex values are unsupported.
@@ -657,6 +688,33 @@ class OrtValueTensor extends OrtValue {
 }
 
 class OrtValueSequence extends OrtValue {
+  /// Copies nonempty homogeneous tensors into independently owned ORT storage.
+  factory OrtValueSequence.fromTensors(List<OrtValueTensor> tensors) {
+    if (tensors.isEmpty) throw ArgumentError('A typed sequence requires at least one tensor.');
+    if (tensors.any((t) => t.elementType != tensors.first.elementType)) {
+      throw ArgumentError('Sequence tensor element types must match.');
+    }
+    return _ownedComposite(tensors, ONNXType.sequence) as OrtValueSequence;
+  }
+
+  /// Independently owned child handles. Release each returned child.
+  List<OrtValue> get elements {
+    _checkNotReleased();
+    final result = <OrtValue>[];
+    try {
+      usingNative((arena) {
+        final count = arena<ffi.Size>();
+        OrtStatus.checkOrtStatus(OrtEnv.instance.ortApiPtr.ref.GetValueCount.asFunction<
+            bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtValue>, ffi.Pointer<ffi.Size>)>()(_ptr, count));
+        for (var i = 0; i < count.value; i++) {
+          final out = arena<ffi.Pointer<bg.OrtValue>>();
+          result.add(_wrapOwnedValue(_getOrtValue(_ptr, i, out)));
+        }
+      });
+      return result;
+    } catch (_) { for (final value in result) { value.release(); } rethrow; }
+  }
+
   int _valueCount = 0;
   var _onnxType = ONNXType.unknown;
   OrtTensorTypeAndShapeInfo? _tensorInfo;
@@ -753,6 +811,14 @@ class OrtValueSequence extends OrtValue {
 }
 
 class OrtValueMap extends OrtValue {
+  /// Copies flat key/value tensors; ORT validates supported key/value types.
+  factory OrtValueMap.fromTensors(OrtValueTensor keys, OrtValueTensor values) {
+    if (keys.shape.length != 1 || values.shape.length != 1 || keys.shape.single != values.shape.single) {
+      throw ArgumentError('Map keys and values must be equal-length vectors.');
+    }
+    return _ownedComposite([keys, values], ONNXType.map) as OrtValueMap;
+  }
+
   late OrtTensorTypeAndShapeInfo _keyInfo;
   late OrtTensorTypeAndShapeInfo _valueInfo;
 
@@ -829,6 +895,17 @@ class OrtValueMap extends OrtValue {
 }
 
 class OrtValueSparseTensor extends OrtValue {
+  factory OrtValueSparseTensor.fromCoo(TypedData values, List<int> shape, Int64List indices) =>
+      _createSparse(values, shape, indices);
+  factory OrtValueSparseTensor.fromCsr(TypedData values, List<int> shape,
+      Int64List innerIndices, Int64List outerIndices) =>
+      _createSparse(values, shape, innerIndices, outer: outerIndices);
+  factory OrtValueSparseTensor.fromBlockSparse(TypedData values, List<int> shape,
+      List<int> valuesShape, Int32List indices, List<int> indicesShape) =>
+      _createSparse(values, shape, Int64List(0), blockValuesShape: valuesShape,
+          blockIndices: indices, blockIndicesShape: indicesShape);
+  OrtSparseTensorData toSparseData() { _checkNotReleased(); return _readSparse(this); }
+
   // ignore: unused_field
   late OrtTensorTypeAndShapeInfo _info;
   late OrtSparseFormat _ortSparseFormat;
@@ -966,29 +1043,5 @@ class OrtTensorTypeAndShapeInfo {
 
       return count;
     });
-  }
-}
-
-enum OrtSparseFormat {
-  undefined(bg.OrtSparseFormat.ORT_SPARSE_UNDEFINED),
-  coo(bg.OrtSparseFormat.ORT_SPARSE_COO),
-  csrc(bg.OrtSparseFormat.ORT_SPARSE_CSRC),
-  blockSparse(bg.OrtSparseFormat.ORT_SPARSE_BLOCK_SPARSE);
-
-  final int value;
-
-  const OrtSparseFormat(this.value);
-
-  static OrtSparseFormat valueOf(int type) {
-    switch (type) {
-      case bg.OrtSparseFormat.ORT_SPARSE_COO:
-        return OrtSparseFormat.coo;
-      case bg.OrtSparseFormat.ORT_SPARSE_CSRC:
-        return OrtSparseFormat.csrc;
-      case bg.OrtSparseFormat.ORT_SPARSE_BLOCK_SPARSE:
-        return OrtSparseFormat.blockSparse;
-      default:
-        return OrtSparseFormat.undefined;
-    }
   }
 }
