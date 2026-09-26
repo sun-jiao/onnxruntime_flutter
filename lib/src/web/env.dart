@@ -53,6 +53,9 @@ class OrtEnv {
   Object get ptr => _nativeOnly('OrtEnv.ptr');
   Object get ortApiPtr => _nativeOnly('OrtEnv.ortApiPtr');
   List<OrtProvider> availableProviders() => [OrtProvider.cpu];
+  List<String> availableProviderNames() => [OrtProvider.cpu.value];
+  OrtRuntimeCapabilities get capabilities => OrtRuntimeCapabilities(
+      version, 'web', availableProviderNames(), profilingFile: false);
 }
 
 class OrtThreadingOptions {

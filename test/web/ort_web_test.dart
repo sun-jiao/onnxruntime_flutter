@@ -107,6 +107,18 @@ void main() {
     } finally { await session.closeAsync(); input.release(); run.release(); options.release(); }
   });
 
+  test('provider registration policy and runtime capabilities', () {
+    final options = OrtSessionOptions();
+    try {
+      expect(() => options.configureProviders([OrtProviderConfig.qnn()]), throwsUnsupportedError);
+      final report = options.configureProviders([OrtProviderConfig.qnn()], fallback: OrtProviderFallback.cpu);
+      expect(report.registered, [OrtProvider.cpu]);
+      expect(report.skipped.keys, [OrtProvider.qnn]);
+      expect(OrtEnv.instance.capabilities.backend, 'web');
+      expect(OrtEnv.instance.capabilities.profilingFile, isFalse);
+    } finally { options.release(); }
+  });
+
   test('runtime, providers, options and unsupported native operations', () {
     expect(OrtEnv.version, '1.23.2');
     expect(OrtEnv.instance.availableProviders(), [OrtProvider.cpu]);

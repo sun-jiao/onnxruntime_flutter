@@ -1,3 +1,4 @@
+import 'ort_provider_config.dart';
 import 'dart:ffi' as ffi;
 import 'package:ffi/ffi.dart';
 import 'package:onnxruntime/src/bindings/bindings.dart';
@@ -91,7 +92,13 @@ class OrtEnv {
   }
 
   /// Gets all available providers.
-  List<OrtProvider> availableProviders() {
+  List<OrtProvider> availableProviders() => availableProviderNames()
+      .map(OrtProvider.valueOf).toList();
+
+  OrtRuntimeCapabilities get capabilities => OrtRuntimeCapabilities(
+      version, 'native', availableProviderNames(), profilingFile: true);
+
+  List<String> availableProviderNames() {
     return usingNative((arena) {
       final providersPtr = arena<ffi.Pointer<ffi.Pointer<ffi.Char>>>();
       final lengthPtr = arena<ffi.Int>();
@@ -107,9 +114,9 @@ class OrtEnv {
         OrtStatus.checkOrtStatus(statusPtr);
       });
       int length = lengthPtr.value;
-      final list = List<OrtProvider>.generate(length, (index) {
+      final list = List<String>.generate(length, (index) {
         final provider = providersPtr.value[index].cast<Utf8>().toDartString();
-        return OrtProvider.valueOf(provider);
+        return provider;
       });
       return list;
     });

@@ -297,3 +297,22 @@ separately; otherwise lazy initialization appears in the first warmup/run.
 Warmups are excluded from statistics. These are wall-clock timings including
 scheduling and wrapper/output-disposal overhead, not per-operator timings.
 Failures propagate instead of becoming successful benchmark samples.
+
+### Provider configuration and diagnostics
+
+`options.configureProviders([OrtProviderConfig.qnn(...),
+OrtProviderConfig.xnnpack(intraOpNumThreads: 2), OrtProviderConfig.cpu()],
+fallback: OrtProviderFallback.cpu)` registers providers in priority order.
+CoreML/NNAPI constructors accept sets of flags, QNN accepts backendPath,
+performanceMode and extraOptions. The returned report lists registered providers
+and skipped failures. `error` is the default policy; `skipUnavailable` skips
+failed registrations but requires at least one success; `cpu` explicitly adds
+CPU when absent. Native registration uses cloned options and rolls back on
+failure. Existing registrations on those options stay ahead of new ones.
+
+`OrtEnv.instance.availableProviderNames()` preserves raw names (including
+providers unknown to this wrapper), and `capabilities` reports runtime version,
+backend and profiling-file support. Availability means compiled into the runtime,
+not that hardware/backend dependencies work or that every model operator runs
+there. These policies govern registration, not ORT's internal per-operator CPU
+fallback. Existing append methods and `availableProviders()` retain their behavior.

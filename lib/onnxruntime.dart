@@ -9,3 +9,4 @@ export 'src/ort_model_info.dart' show OrtValueInfo;
 export 'src/ort_inference_exception.dart';
 export 'src/ort_scope.dart';
 export 'src/ort_benchmark.dart';
+export 'src/ort_provider_config.dart' show OrtProviderConfig, OrtProviderFallback, OrtProviderReport, OrtRuntimeCapabilities, QnnPerformanceMode;

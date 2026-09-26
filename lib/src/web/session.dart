@@ -287,6 +287,13 @@ class OrtSessionOptions {
         ['disabled', 'basic', 'extended', 'all'][level.index];
   }
 
+  OrtProviderReport configureProviders(List<OrtProviderConfig> providers,
+      {OrtProviderFallback fallback = OrtProviderFallback.error}) {
+    _check();
+    return registerOrtProviders(providers, fallback,
+        OrtEnv.instance.availableProviderNames(), (config) => config.provider == OrtProvider.cpu);
+  }
+
   bool appendCPUProvider(CPUFlags flags) {
     _check();
     _values['enableCpuMemArena'] = flags == CPUFlags.useArena;

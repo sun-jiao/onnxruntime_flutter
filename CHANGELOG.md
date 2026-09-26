@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add typed provider configurations, atomic native registration, fallback reports and runtime capabilities.
+
 - Add ORT profiling controls and cross-platform benchmark reports with warmup and percentile timings.
 
 - Add resource scopes, usingSession and awaitable session shutdown.

@@ -1,3 +1,4 @@
+import 'ort_provider_config.dart';
 import 'ort_model_info.dart';
 import 'util/session_type_info.dart';
 import 'dart:ffi' as ffi;
@@ -545,6 +546,47 @@ class OrtSessionOptions {
     );
   }
 
+  /// Registers providers in priority order against a clone. Failure leaves the
+  /// original options intact. Existing registrations remain ahead of this list.
+  /// Fallback controls registration errors, not ORT's per-operator CPU fallback.
+  OrtProviderReport configureProviders(List<OrtProviderConfig> providers,
+      {OrtProviderFallback fallback = OrtProviderFallback.error}) {
+    _checkNotReleased();
+    final api = OrtEnv.instance.ortApiPtr.ref;
+    final original = _ptr;
+    final cloned = usingNative((arena) {
+      final out = arena<ffi.Pointer<bg.OrtSessionOptions>>();
+      OrtStatus.checkOrtStatus(api.CloneSessionOptions.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>,
+          ffi.Pointer<ffi.Pointer<bg.OrtSessionOptions>>)>()(original, out));
+      return out.value;
+    });
+    _ptr = cloned;
+    var committed = false;
+    try {
+      final report = registerOrtProviders(providers, fallback,
+          OrtEnv.instance.availableProviderNames(), (config) {
+        switch (config.provider) {
+          case OrtProvider.cpu:
+          case OrtProvider.coreml:
+          case OrtProvider.nnapi:
+            return _appendExecutionProvider(config.provider, _ProviderFlags(config.flags));
+          case OrtProvider.qnn:
+            return _appendExecutionProvider2(config.provider, config.options);
+          case OrtProvider.xnnpack:
+            return _appendExecutionProvider2(config.provider, {
+              'intra_op_num_threads': _intraOpNumThreads.toString(), ...config.options});
+        }
+      });
+      committed = true;
+      return report;
+    } finally {
+      if (!committed) _ptr = original;
+      api.ReleaseSessionOptions.asFunction<void Function(ffi.Pointer<bg.OrtSessionOptions>)>()(
+          committed ? original : cloned);
+    }
+  }
+
   /// Appends cpu provider.
   bool appendCPUProvider(CPUFlags flags) {
     return _appendExecutionProvider(OrtProvider.cpu, flags);
@@ -721,4 +763,10 @@ enum GraphOptimizationLevel {
   final int value;
 
   const GraphOptimizationLevel(this.value);
+}
+
+class _ProviderFlags implements OrtFlags {
+  @override
+  final int value;
+  _ProviderFlags(this.value);
 }
