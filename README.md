@@ -30,6 +30,14 @@ first build needs network access or a prefilled cache. See
 
 ## Getting Started
 
+Requires Dart >=3.7.0 <4.0.0 and Flutter >=3.29.0, matching the SDK
+requirement of the runtime dependency `ffi 2.2.0`. Flutter 3.29 ships with
+Dart 3.7; see the [official release archive](https://docs.flutter.dev/release/archive-whats-new).
+
+For repository development, use the Flutter version pinned in CI. Development
+tools such as `ffigen` have higher SDK requirements than the published library's
+runtime dependencies.
+
 In your flutter project add the dependency:
 
 ```yml

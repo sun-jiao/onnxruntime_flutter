@@ -12,6 +12,13 @@ python3 tool/run_native_tests.py
 Python 3 and CMake are required for the test runner. Set `ORT_CACHE_DIR` to share
 or prefill a cache for offline runs; see [native downloads](../cmake/README.md).
 
+Use the Flutter version pinned in CI for repository development; development
+dependencies require a newer SDK than the library's Dart 3.7 / Flutter 3.29
+runtime minimum. Offline packaging tests cover SDK acceptance/rejection boundaries
+and ensure the example advertises the same minimum requirements as the library.
+The existing generated FFI binding retains its Dart 2.17 language version so
+raising the package SDK floor does not change its native type declarations.
+
 The tests cover concurrent first calls, repeated concurrent batches after
 initialization, unique output ownership, per-request values, and sequential calls
 with both default and explicit output names.
