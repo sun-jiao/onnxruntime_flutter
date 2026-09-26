@@ -55,6 +55,7 @@ extension type _Session(JSObject _) implements JSObject {
     JSObject options,
   );
   external JSPromise<JSAny?> release();
+  external void endProfiling();
 }
 
 @JS('Object.keys')

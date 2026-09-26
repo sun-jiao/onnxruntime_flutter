@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add ORT profiling controls and cross-platform benchmark reports with warmup and percentile timings.
+
 - Add resource scopes, usingSession and awaitable session shutdown.
 
 - Add independently owned flat numeric tensor copies through toTypedData on native and Web, preserving legacy value extraction.

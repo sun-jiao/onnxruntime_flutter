@@ -95,6 +95,18 @@ void main() {
     await checkClose(session);
   });
 
+  test('browser profiling and inference benchmark', () async {
+    final options = OrtSessionOptions()..enableProfiling();
+    final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
+    final input = OrtValueTensor.createTensorWithDataList(Float32List.fromList([1, 2]), [1, 2]);
+    final run = OrtRunOptions();
+    try {
+      final report = await benchmarkInference(session, run, {'input': input}, warmupRuns: 1, iterations: 2);
+      expect(report.samples, hasLength(2));
+      expect(session.endProfiling(), isNull);
+    } finally { await session.closeAsync(); input.release(); run.release(); options.release(); }
+  });
+
   test('runtime, providers, options and unsupported native operations', () {
     expect(OrtEnv.version, '1.23.2');
     expect(OrtEnv.instance.availableProviders(), [OrtProvider.cpu]);

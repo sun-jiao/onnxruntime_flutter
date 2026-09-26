@@ -198,6 +198,14 @@ class OrtSession {
     }
   }
 
+  /// Web writes profiling information through ORT's browser console, not a file.
+  String? endProfiling() {
+    _check();
+    if (_session == null) throw StateError('The Web session has not initialized.');
+    _session!.endProfiling();
+    return null;
+  }
+
   String getMetadatas(String key) {
     _check();
     final value = _info.metadata[key.split('\u0000').first];
@@ -252,6 +260,14 @@ class OrtSessionOptions {
   }
 
   void release() => _released = true;
+  /// Enables ORT Web profiling. Prefix is validated but no browser file is made.
+  void enableProfiling([String prefix = 'onnxruntime_profile']) {
+    _check();
+    if (prefix.isEmpty || prefix.contains('\u0000')) throw ArgumentError.value(prefix, 'prefix');
+    _values['enableProfiling'] = true;
+  }
+  void disableProfiling() { _check(); _values['enableProfiling'] = false; }
+
   void setIntraOpNumThreads(int numThreads) {
     _check();
     if (numThreads < 0) throw ArgumentError.value(numThreads, 'numThreads');

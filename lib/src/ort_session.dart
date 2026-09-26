@@ -354,6 +354,32 @@ class OrtSession {
     return _isolateSession!.runOrThrow(runOptions, inputs, outputNames);
   }
 
+  /// Ends profiling after all outstanding runs have been awaited.
+  /// Returns the native JSON trace path, or null if profiling was disabled.
+  String? endProfiling() {
+    _checkNotReleased();
+    return usingNative((arena) {
+      final out = arena<ffi.Pointer<ffi.Char>>();
+      final api = OrtEnv.instance.ortApiPtr.ref;
+      final allocator = OrtAllocator.instance.ptr;
+      OrtStatus.checkOrtStatus(api.SessionEndProfiling.asFunction<
+          bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
+          ffi.Pointer<bg.OrtAllocator>, ffi.Pointer<ffi.Pointer<ffi.Char>>)>()(
+          _ptr, allocator, out));
+      try {
+        if (out.value == ffi.nullptr) return null;
+        final path = out.value.cast<Utf8>().toDartString();
+        return path.isEmpty ? null : path;
+      } finally {
+        if (out.value != ffi.nullptr) {
+          OrtStatus.checkOrtStatus(api.AllocatorFree.asFunction<
+              bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtAllocator>,
+              ffi.Pointer<ffi.Void>)>()(allocator, out.value.cast()));
+        }
+      }
+    });
+  }
+
   String getMetadatas(String key) {
     _checkNotReleased();
     return readModelMetadata(
@@ -425,6 +451,24 @@ class OrtSessionOptions {
     _released = true;
     OrtEnv.instance.ortApiPtr.ref.ReleaseSessionOptions
         .asFunction<void Function(ffi.Pointer<bg.OrtSessionOptions>)>()(_ptr);
+  }
+
+  /// Enables a JSON trace file prefixed with [prefix]. Configure before loading.
+  void enableProfiling([String prefix = 'onnxruntime_profile']) {
+    _checkNotReleased();
+    if (prefix.isEmpty || prefix.contains('\u0000')) throw ArgumentError.value(prefix, 'prefix');
+    usingNative((arena) {
+      final path = allocateOrtPath(prefix, isWindows: Platform.isWindows, allocator: arena);
+      OrtStatus.checkOrtStatus(OrtEnv.instance.ortApiPtr.ref.EnableProfiling
+          .asFunction<bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>,
+              ffi.Pointer<ffi.Char>)>()(_ptr, path));
+    });
+  }
+
+  void disableProfiling() {
+    _checkNotReleased();
+    OrtStatus.checkOrtStatus(OrtEnv.instance.ortApiPtr.ref.DisableProfiling
+        .asFunction<bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSessionOptions>)>()(_ptr));
   }
 
   /// Sets the number of intra op threads.

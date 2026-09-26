@@ -278,3 +278,22 @@ Await work inside the scope; returned output values must not be registered if
 they need to outlive it. Cleanup errors are aggregated in `OrtScopeException`;
 a callback error takes precedence, with cleanup errors retained on
 `scope.disposalErrors`.
+
+### Profiling and benchmarks
+
+Call `options.enableProfiling(prefix)` before constructing a session. After
+awaiting all inference calls, `session.endProfiling()` returns the native JSON
+trace path (or null when disabled). `disableProfiling()` affects subsequently
+created sessions. Web enables ORT's browser profiling and returns null instead
+of a file; the prefix is not a browser download destination.
+
+`benchmarkInference(session, runOptions, inputs, warmupRuns: 3, iterations: 20)`
+runs strict inference, disposes each output, and returns immutable timings,
+mean, min/max, nearest-rank P50/P95 and `toJson()`. Session, inputs and options
+remain caller-owned. `benchmarkOrt(run: ..., initialize: ...)` can measure a
+custom pipeline and a separate initialization callback; both functions accept
+that optional callback. Preinitialize Web explicitly when measuring startup
+separately; otherwise lazy initialization appears in the first warmup/run.
+Warmups are excluded from statistics. These are wall-clock timings including
+scheduling and wrapper/output-disposal overhead, not per-operator timings.
+Failures propagate instead of becoming successful benchmark samples.
