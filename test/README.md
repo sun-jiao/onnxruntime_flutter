@@ -1,26 +1,16 @@
 # Native inference regression tests
 
 Run from the repository root. The tests use the existing FLOAT model in
-`example/assets/models/test_types_FLOAT.pb` and the bundled ONNX Runtime library.
-
-Linux x64:
-
-```sh
-LD_LIBRARY_PATH="$PWD/linux${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" flutter test
-```
-
-macOS:
+`example/assets/models/test_types_FLOAT.pb` and the pinned ONNX Runtime library,
+which the runner downloads and verifies for the host architecture:
 
 ```sh
-DYLD_LIBRARY_PATH="$PWD/macos${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" flutter test
+flutter pub get
+python3 tool/run_native_tests.py
 ```
 
-Windows x64 (PowerShell):
-
-```powershell
-$env:PATH = "$PWD\windows;$env:PATH"
-flutter test
-```
+Python 3 and CMake are required for the test runner. Set `ORT_CACHE_DIR` to share
+or prefill a cache for offline runs; see [native downloads](../cmake/README.md).
 
 The tests cover concurrent first calls, repeated concurrent batches after
 initialization, unique output ownership, per-request values, and sequential calls
@@ -86,23 +76,24 @@ libraries, and supported hardware; the fixture does not claim hardware coverage.
 Runtime compatibility tests assert the loaded native version and C API contract,
 and compare synchronous/asynchronous inference to fixed expected values using a
 common IR 8 / opset 13 model. `ORT_TEST_VERSION` allows the same suite to validate
-an isolated alternate runtime. Packaging tests verify dependency pins and binary
-hashes: `python3 -m unittest discover -s test/packaging -v`.
+an isolated alternate runtime. Offline packaging tests verify dependency pins, download hash enforcement,
+cache repair and target selection: `python3 -m unittest discover -s test/packaging -v`.
 See [runtime compatibility](../tool/RUNTIME_COMPATIBILITY.md) for the remaining
 cross-version and device-validation limits.
 
 ## Automated runs
 
-`python3 tool/run_native_tests.py` selects the bundled native library for the
+`python3 tool/run_native_tests.py` selects the downloaded native library for the
 current desktop architecture and returns Flutter's exit status. Install package
 dependencies with `flutter pub get` first. For an isolated alternative library,
 pass both `--runtime-dir` and `--runtime-version`.
 
 The GitHub Actions workflow runs on pushes and pull requests: native tests on
-Linux x64/ARM64, Windows x64 and macOS ARM64, plus Linux x64 with ORT 1.23.2.
-The latter checks the Android runtime version on a host; it is not an Android
-device test. A Linux packaging job verifies all desktop artifact headers, CMake
-selection, version hashes, runner failure propagation and fixture reproducibility.
+Linux x64/ARM64, Windows x64 and macOS ARM64, plus Linux x64 with ORT 1.23.2 (the macOS runtime version).
+The latter checks the macOS runtime version on a Linux host; it does not exercise
+CoreML or Apple libraries. A Linux packaging job verifies CMake target selection,
+download checksums/cache repair, local CocoaPods preparation, manifest consistency,
+runner failure propagation and fixture reproducibility.
 Windows ARM64 and mobile device inference still need target-device validation.
 Analysis treats errors and warnings as failures while retaining existing info
 level documentation lints. CI does not publish packages or modify native pins.

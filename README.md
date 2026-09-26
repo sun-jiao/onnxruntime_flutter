@@ -9,12 +9,14 @@ Flutter plugin for OnnxRuntime via `dart:ffi` provides an easy, flexible, and fa
 
 | **Platform**      | Android       | iOS | Linux | macOS | Windows |
 |-------------------|---------------|-----|-------|-------|---------|
-| **Compatibility** | API level 21+ | *   | *     | *     | *       |
-| **Architecture**  | arm32/arm64   | *   | x64/arm64 | * | x64/arm64 |
+| **Compatibility** | API level 24+ | 15.1+ | glibc 2.28+ | 13.4+ | *       |
+| **Architecture**  | arm32/arm64/x86/x64 | * | x64/arm64 | x64/arm64 | x64/arm64 |
 
 *: [Consistent with Flutter](https://docs.flutter.dev/reference/supported-platforms)
 
-Desktop builds select the native library for the target architecture. See
+Desktop builds download and cache the verified native library for the target
+architecture; no desktop runtime binaries are shipped in the pub package. The
+first build needs network access or a prefilled cache. See
 [desktop packaging](cmake/README.md) for binary provenance and validation.
 
 ## Key Features
@@ -94,7 +96,8 @@ See the [upstream QNN documentation](https://onnxruntime.ai/docs/execution-provi
 
 ### Native runtime versions
 
-Android currently uses ORT 1.23.2; the other platforms use 1.15.1. The Dart wrapper
+Android, iOS, Linux and Windows use ORT 1.30.0. macOS uses ORT 1.23.2
+to preserve Intel and Apple Silicon support. The Dart wrapper
 uses C API 14. Model support and numerical results may differ between versions;
 see the [compatibility contract and tests](tool/RUNTIME_COMPATIBILITY.md).
 

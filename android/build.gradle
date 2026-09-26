@@ -5,26 +5,21 @@ plugins {
 group 'com.gtbluesky.onnxruntime'
 version '1.0'
 
-repositories {
-}
-
 android {
     namespace 'com.gtbluesky.onnxruntime'
     compileSdk 36
 
-    ndkVersion android.ndkVersion
-
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
     }
 
     defaultConfig {
-        minSdk 21
+        minSdk 24
     }
 }
 
 dependencies {
-    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.23.2'
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.30.0'
 }
 

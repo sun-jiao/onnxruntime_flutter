@@ -1,3 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.gtbluesky.onnxruntime">
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Keep FFI initialization lazy; do not start the new upstream telemetry
+         Java provider automatically when the host application starts. -->
+    <application>
+        <provider android:name="ai.onnxruntime.TelemetryInitializer"
+            tools:node="remove" />
+    </application>
 </manifest>

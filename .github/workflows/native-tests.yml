@@ -9,6 +9,43 @@ permissions:
   contents: read
 
 jobs:
+  android-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter config --jdk-dir="$JAVA_HOME"
+      - run: flutter pub get
+        working-directory: example
+      - run: flutter build apk --release --target-platform android-arm64
+        working-directory: example
+
+  apple-build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: example
+      - run: flutter build ios --release --no-codesign
+        working-directory: example
+      - run: flutter build macos --release
+        working-directory: example
+
   packaging:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -30,13 +67,13 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
-            runtime: bundled
+            runtime: pinned
           - os: ubuntu-24.04-arm
-            runtime: bundled
+            runtime: pinned
           - os: windows-2022
-            runtime: bundled
+            runtime: pinned
           - os: macos-15
-            runtime: bundled
+            runtime: pinned
           - os: ubuntu-24.04
             runtime: '1.23.2'
     runs-on: ${{ matrix.os }}
@@ -59,10 +96,10 @@ jobs:
       - run: flutter pub get
       - name: Analyze library and tests
         run: flutter analyze --no-fatal-infos lib test
-      - name: Test bundled runtime
-        if: matrix.runtime == 'bundled'
+      - name: Fetch and test pinned runtime
+        if: matrix.runtime == 'pinned'
         run: python tool/run_native_tests.py
-      - name: Test Android runtime version on Linux host
+      - name: Test macOS runtime version on Linux host
         if: matrix.runtime == '1.23.2'
         shell: bash
         run: |
@@ -73,5 +110,5 @@ jobs:
           echo "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b  $archive" | sha256sum --check
           tar -xzf "$archive" -C "$RUNNER_TEMP"
           runtime_dir="$RUNNER_TEMP/onnxruntime-linux-x64-1.23.2/lib"
-          ln -s libonnxruntime.so.1.23.2 "$runtime_dir/libonnxruntime.so.1.15.1"
+          ln -s libonnxruntime.so.1.23.2 "$runtime_dir/libonnxruntime.so.1.30.0"
           python tool/run_native_tests.py --runtime-dir "$runtime_dir" --runtime-version 1.23.2

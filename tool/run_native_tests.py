@@ -5,12 +5,13 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+from fetch_native_libraries import fetch_runtime, host_target
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_environment(system, machine, root, environment, runtime_dir=None,
-                     runtime_version=None):
+                     runtime_version=None, downloaded_dir=None):
     if bool(runtime_dir) != bool(runtime_version):
         raise ValueError('An alternate runtime needs both its directory and version')
     system = system.lower()
@@ -22,9 +23,9 @@ def test_environment(system, machine, root, environment, runtime_dir=None,
     else:
         raise ValueError(f'Unsupported test architecture: {machine}')
     platforms = {
-        'linux': ('linux', 'LD_LIBRARY_PATH', ':', 'libonnxruntime.so.1.15.1'),
+        'linux': ('linux', 'LD_LIBRARY_PATH', ':', 'libonnxruntime.so.1.30.0'),
         'windows': ('windows', 'PATH', ';', 'onnxruntime.dll'),
-        'darwin': ('macos', 'DYLD_LIBRARY_PATH', ':', 'libonnxruntime.1.15.1.dylib'),
+        'darwin': ('macos', 'DYLD_LIBRARY_PATH', ':', 'libonnxruntime.1.23.2.dylib'),
     }
     if system not in platforms:
         raise ValueError(f'Unsupported test platform: {system}')
@@ -32,12 +33,14 @@ def test_environment(system, machine, root, environment, runtime_dir=None,
     directory = Path(root) / folder
     if system != 'darwin' and arch == 'arm64':
         directory /= 'arm64'
+    if downloaded_dir:
+        directory = Path(downloaded_dir)
     if runtime_dir:
         directory = Path(runtime_dir).resolve()
     if not (directory / filename).is_file():
         raise ValueError(f'Native test library is missing: {directory / filename}')
     env = dict(environment)
-    # Do not let a stale test expectation disguise the bundled runtime version.
+    # Do not let a stale test expectation disguise the pinned runtime version.
     env.pop('ORT_TEST_VERSION', None)
     if runtime_version:
         env['ORT_TEST_VERSION'] = runtime_version
@@ -51,8 +54,11 @@ def main(argv=None):
     parser.add_argument('--runtime-version')
     args = parser.parse_args(argv)
     try:
+        downloaded = None
+        if not args.runtime_dir and not args.runtime_version:
+            downloaded = fetch_runtime(host_target())
         env = test_environment(platform.system(), platform.machine(), ROOT,
-                               os.environ, args.runtime_dir, args.runtime_version)
+                               os.environ, args.runtime_dir, args.runtime_version, downloaded)
     except ValueError as error:
         parser.error(str(error))
     # Resolve flutter.bat explicitly on Windows as subprocess does not apply

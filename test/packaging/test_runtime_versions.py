@@ -1,5 +1,5 @@
 """Guard native version changes independently of the Dart API version."""
-import hashlib
+import importlib.util
 import json
 import pathlib
 import re
@@ -18,12 +18,32 @@ class RuntimeVersionTest(unittest.TestCase):
         ios = (ROOT / 'ios/onnxruntime.podspec').read_text()
         self.assertEqual(re.search(r"'onnxruntime-objc', '([0-9.]+)'", ios)[1],
                          versions['ios'])
-        self.assertTrue((ROOT / f"linux/libonnxruntime.so.{versions['linux']}").is_file())
-        self.assertTrue((ROOT / f"macos/libonnxruntime.{versions['macos']}.dylib").is_file())
-        for filename, digest in contract['bundled_libraries'].items():
-            with self.subTest(filename=filename):
-                self.assertEqual(hashlib.sha256((ROOT / filename).read_bytes()).hexdigest(),
-                                 digest, 'Update and validate the compatibility matrix when replacing a library')
+        self.assertFalse((ROOT / f"linux/libonnxruntime.so.{versions['linux']}").exists())
+        self.assertFalse((ROOT / f"macos/libonnxruntime.{versions['macos']}.dylib").exists())
+        spec = importlib.util.spec_from_file_location('generator', ROOT / 'tool/generate_native_downloads.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual((ROOT / 'cmake/onnxruntime_downloads.cmake').read_text(), module.generate(contract))
+        for filename in contract['libraries']:
+            self.assertFalse((ROOT / filename).exists(), 'Native binaries must not be committed or published')
+
+    def test_official_archive_inventory_covers_all_bundled_libraries(self):
+        contract = json.loads((ROOT / 'tool/native_runtime_versions.json').read_text())
+        restored = set()
+        for archive in contract['archives']:
+            self.assertTrue(archive['url'].startswith(
+                'https://github.com/microsoft/onnxruntime/releases/download/'))
+            self.assertRegex(archive['sha256'], r'^[0-9a-f]{64}$')
+            for destination, member in archive['files'].items():
+                self.assertNotIn(destination, restored)
+                restored.add(destination)
+                self.assertFalse((ROOT / destination).exists())
+                self.assertNotIn('..', pathlib.PurePosixPath(member).parts)
+        self.assertTrue(set(contract['libraries']).issubset(restored))
+        for filename in contract['libraries']:
+            folder = pathlib.PurePosixPath(filename).parent
+            for notice in ['LICENSE', 'ThirdPartyNotices.txt']:
+                self.assertIn(str(folder / notice), restored)
 
 
 if __name__ == '__main__':

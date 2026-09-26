@@ -1,3 +1,11 @@
+## Unreleased
+
+* Upgrade ONNX Runtime to 1.30.0 on Android, iOS, Linux and Windows; upgrade macOS to 1.23.2 universal2 to retain Intel support.
+* Require Android API 24+, iOS 15.1+, macOS 13.4+, and Linux glibc 2.28+.
+* Update the Android example to AGP 8.13.2, Gradle 8.14.4, Kotlin 2.3.21 and JVM 17; verify 16 KB native alignment.
+* Download and cache desktop runtime/provider libraries during native builds instead of committing binaries or publishing them in the pub package. Pin archive/library SHA-256 hashes and support prefilled offline caches.
+* Preserve public Dart APIs and C API 14. Runtime version strings, native errors, supported models and numerical results can change with ONNX Runtime; see tool/RUNTIME_COMPATIBILITY.md.
+
 ## 1.4.1
 
 * Fixes a memory leak when creating tensor.

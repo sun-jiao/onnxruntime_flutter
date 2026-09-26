@@ -1,30 +1,61 @@
-# Desktop native libraries
+# Native dependency downloads
 
-Linux and Windows bundle ONNX Runtime 1.15.1 for x64 (the original platform
-folder) and ARM64 (`arm64/`). CMake selects `FLUTTER_TARGET_PLATFORM` first,
-then the Windows generator platform or target system processor for older builds.
-Unknown targets fail at configuration time rather than packaging an x64 library.
-Library basenames and the Dart API remain unchanged.
+The repository and pub package contain no ONNX Runtime desktop binaries.
+Linux/Windows CMake downloads only the selected target's official release during
+configuration, verifies the archive and library SHA-256 hashes, and packages the
+runtime plus provider support library. Target selection uses Flutter's target
+platform before the host processor. Unsupported targets fail explicitly.
 
-ARM64 binaries were extracted from the official
-[ONNX Runtime v1.15.1 release](https://github.com/microsoft/onnxruntime/releases/tag/v1.15.1).
-The upstream license and third-party notices accompany each binary.
+macOS keeps the 1.23.2 universal2 dylib. Its local CocoaPods spec runs
+`macos/download_runtime.rb` before CocoaPods enumerates vendored libraries.
+This is intentional: CocoaPods does not run `prepare_command` for local/path
+pods. The helper uses macOS's Ruby, curl and tar, verifies SHA-256, and copies the
+library/notices into the ignored `macos/.onnxruntime/` staging directory.
+No additional Python or CMake installation is required for macOS app builds.
 
-| Artifact | SHA-256 |
-| --- | --- |
-| `onnxruntime-linux-aarch64-1.15.1.tgz` | `85272e75d8dd841138de4b774a9672ea93c1be108d96038c6c34a62d7f976aee` |
-| `linux/arm64/libonnxruntime.so.1.15.1` | `5c6de97d2a2dbdd706c3f312d41e909b063ceb3284856174eb4f645d4cca9f88` |
-| `onnxruntime-win-arm64-1.15.1.zip` | `7d9a837c02b1fbed8ee5698e7e18976fe73988df411e97693fd5cf5b09ee0552` |
-| `windows/arm64/onnxruntime.dll` | `ab84e76a41fc404b98e55b1d394f83b9c932f49bf65395b56a1cdf5862713e7e` |
+## Cache and offline builds
 
-Run the offline packaging tests with:
+Set `ORT_CACHE_DIR` to an absolute writable directory to share downloaded archives
+between builds, platforms and the native test runner. Defaults are:
+
+- Linux/Windows builds: `<CMake build directory>/_deps/onnxruntime`.
+- macOS CocoaPods: `~/.cache/onnxruntime_flutter`.
+- Native Dart test runner: `<repository>/build/native`.
+
+Each artifact has its own SHA-256-named cache directory with an `archive` file.
+An empty cache requires network access to GitHub releases. After a successful
+fetch, subsequent builds can use the cache offline. To prepare a cache on a
+connected machine (Python 3 and CMake required for this helper):
+
+```sh
+python3 tool/fetch_native_libraries.py --target linux-x64 --cache-dir /path/to/cache
+python3 tool/fetch_native_libraries.py --target windows-arm64 --cache-dir /path/to/cache
+python3 tool/fetch_native_libraries.py --target macos-universal2 --cache-dir /path/to/cache
+```
+
+Copy the cache to the build machine and set `ORT_CACHE_DIR` there. Targets also
+include `linux-arm64` and `windows-x64`. Downloads/extraction are serialized per
+artifact; interrupted downloads are never promoted to verified archives. A bad
+archive fails with a checksum error; remove that archive to retry the download.
+Modified extracted libraries are repaired from the verified cached archive.
+Neither downloader writes runtime binaries into tracked source locations.
+
+## Version maintenance and tests
+
+`tool/native_runtime_versions.json` is the source of truth for versions, archive
+URLs/hashes, member mappings and library hashes. After editing it, regenerate the
+CMake 3.10-compatible constants with `python3 tool/generate_native_downloads.py`.
+
+Run offline downloader/target-selection tests:
 
 ```sh
 python3 -m unittest discover -s test/packaging -v
 ```
 
-They run both plugin CMake configurations using simulated target variables and
-inspect the actual ELF/PE machine headers. This verifies artifact selection, not
-ARM64 inference or a Windows toolchain build. Run the Dart native suite on each
-target for execution coverage, setting the library path to the `arm64` folder
-when testing the package directly on an ARM64 host.
+Then run `python3 tool/run_native_tests.py`; it fetches the pinned library for the
+host before executing Flutter tests. App builds do not invoke this Python helper.
+Linux/Windows install the upstream license/notices under `share/onnxruntime`;
+macOS preserves them next to the staged dylib for CocoaPods license handling.
+
+See [runtime compatibility](../tool/RUNTIME_COMPATIBILITY.md) for versions,
+system minimums, Dart compatibility and device-validation limits.

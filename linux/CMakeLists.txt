@@ -10,12 +10,16 @@ project(${PROJECT_NAME} LANGUAGES CXX)
 # Select the target architecture rather than the build host architecture.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/onnxruntime_arch.cmake")
 onnxruntime_target_arch(linux ORT_TARGET_ARCH)
-set(ORT_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-if(ORT_TARGET_ARCH STREQUAL "arm64")
-  set(ORT_LIBRARY_DIR "${ORT_LIBRARY_DIR}/arm64")
-endif()
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/onnxruntime_download.cmake")
+onnxruntime_download("linux-${ORT_TARGET_ARCH}" ORT_ROOT)
+set(ORT_LIBRARY_DIR "${ORT_ROOT}/lib")
+
+# Install the upstream license and notices with the application.
+install(FILES "${ORT_ROOT}/LICENSE" "${ORT_ROOT}/ThirdPartyNotices.txt"
+  DESTINATION "share/onnxruntime" COMPONENT Runtime)
 
 set(onnxruntime_bundled_libraries
-  "${ORT_LIBRARY_DIR}/libonnxruntime.so.1.15.1"
+  "${ORT_LIBRARY_DIR}/libonnxruntime.so.1.30.0"
+  "${ORT_LIBRARY_DIR}/libonnxruntime_providers_shared.so"
   PARENT_SCOPE
 )

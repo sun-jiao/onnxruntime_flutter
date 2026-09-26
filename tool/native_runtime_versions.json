@@ -1,17 +1,77 @@
 {
   "c_api_version": 14,
   "platforms": {
-    "android": "1.23.2",
-    "ios": "1.15.1",
-    "linux": "1.15.1",
-    "macos": "1.15.1",
-    "windows": "1.15.1"
+    "android": "1.30.0",
+    "ios": "1.30.0",
+    "linux": "1.30.0",
+    "macos": "1.23.2",
+    "windows": "1.30.0"
   },
-  "bundled_libraries": {
-    "linux/libonnxruntime.so.1.15.1": "6ce2845caacb638ed78bb23bbadbb4748f962c409a6748b402dc1223ba307b28",
-    "linux/arm64/libonnxruntime.so.1.15.1": "5c6de97d2a2dbdd706c3f312d41e909b063ceb3284856174eb4f645d4cca9f88",
-    "windows/onnxruntime.dll": "bb090dd258282c1d7f7a41a83492ba07bc4fe65d75259435587350e1fa66f1bc",
-    "windows/arm64/onnxruntime.dll": "ab84e76a41fc404b98e55b1d394f83b9c932f49bf65395b56a1cdf5862713e7e",
-    "macos/libonnxruntime.1.15.1.dylib": "c0a7154f9b9df90ad8a9b4a63f45fc7ad26cbc9238241c9faaa53a32092d8264"
+  "archives": [
+    {
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-x64-1.30.0.tgz",
+      "sha256": "a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd",
+      "files": {
+        "linux/libonnxruntime.so.1.30.0": "onnxruntime-linux-x64-1.30.0/lib/libonnxruntime.so.1.30.0",
+        "linux/libonnxruntime_providers_shared.so": "onnxruntime-linux-x64-1.30.0/lib/libonnxruntime_providers_shared.so",
+        "linux/LICENSE": "onnxruntime-linux-x64-1.30.0/LICENSE",
+        "linux/ThirdPartyNotices.txt": "onnxruntime-linux-x64-1.30.0/ThirdPartyNotices.txt"
+      },
+      "target": "linux-x64"
+    },
+    {
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-linux-aarch64-1.30.0.tgz",
+      "sha256": "e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da",
+      "files": {
+        "linux/arm64/libonnxruntime.so.1.30.0": "onnxruntime-linux-aarch64-1.30.0/lib/libonnxruntime.so.1.30.0",
+        "linux/arm64/libonnxruntime_providers_shared.so": "onnxruntime-linux-aarch64-1.30.0/lib/libonnxruntime_providers_shared.so",
+        "linux/arm64/LICENSE": "onnxruntime-linux-aarch64-1.30.0/LICENSE",
+        "linux/arm64/ThirdPartyNotices.txt": "onnxruntime-linux-aarch64-1.30.0/ThirdPartyNotices.txt"
+      },
+      "target": "linux-arm64"
+    },
+    {
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-x64-1.30.0.zip",
+      "sha256": "c6ba983baf5681af108599675d2a89c2d145512d02de28aed0bff177cd0ba949",
+      "files": {
+        "windows/onnxruntime.dll": "onnxruntime-win-x64-1.30.0/lib/onnxruntime.dll",
+        "windows/onnxruntime_providers_shared.dll": "onnxruntime-win-x64-1.30.0/lib/onnxruntime_providers_shared.dll",
+        "windows/LICENSE": "onnxruntime-win-x64-1.30.0/LICENSE",
+        "windows/ThirdPartyNotices.txt": "onnxruntime-win-x64-1.30.0/ThirdPartyNotices.txt"
+      },
+      "target": "windows-x64"
+    },
+    {
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-win-arm64-1.30.0.zip",
+      "sha256": "e53db8a50b23ae35be901cc93428baf997dc8d420333b097b2eae53d3ea9f2d3",
+      "files": {
+        "windows/arm64/onnxruntime.dll": "onnxruntime-win-arm64-1.30.0/lib/onnxruntime.dll",
+        "windows/arm64/onnxruntime_providers_shared.dll": "onnxruntime-win-arm64-1.30.0/lib/onnxruntime_providers_shared.dll",
+        "windows/arm64/LICENSE": "onnxruntime-win-arm64-1.30.0/LICENSE",
+        "windows/arm64/ThirdPartyNotices.txt": "onnxruntime-win-arm64-1.30.0/ThirdPartyNotices.txt"
+      },
+      "target": "windows-arm64"
+    },
+    {
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-universal2-1.23.2.tgz",
+      "sha256": "49ae8e3a66ccb18d98ad3fe7f5906b6d7887df8a5edd40f49eb2b14e20885809",
+      "files": {
+        "macos/libonnxruntime.1.23.2.dylib": "onnxruntime-osx-universal2-1.23.2/lib/libonnxruntime.1.23.2.dylib",
+        "macos/LICENSE": "onnxruntime-osx-universal2-1.23.2/LICENSE",
+        "macos/ThirdPartyNotices.txt": "onnxruntime-osx-universal2-1.23.2/ThirdPartyNotices.txt"
+      },
+      "target": "macos-universal2"
+    }
+  ],
+  "libraries": {
+    "linux/libonnxruntime.so.1.30.0": "245a6f8c38127551057a1cd1ffd59f0a186a227ade4f3492dea2494eb565542e",
+    "linux/libonnxruntime_providers_shared.so": "086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d",
+    "linux/arm64/libonnxruntime.so.1.30.0": "64e903a43a041240fd6bcffe0ac6d4fea47ef87bf24b9d097801bd00a9612a4b",
+    "linux/arm64/libonnxruntime_providers_shared.so": "3b6be288fbfb7dff8770d08a23defdde18e8f7e0f5a2b344a0e5e238c999ea88",
+    "windows/onnxruntime.dll": "7e39e2bdbba836d98071ef28620735ba36a47c554cf794585269aecc50fab0da",
+    "windows/onnxruntime_providers_shared.dll": "b9b7ab9e2a8b08ee7ae4a7ac1c8bfd44a741f17ad8d0f764953140a57de0b796",
+    "windows/arm64/onnxruntime.dll": "46b7ec24a6ee2932bb315edb39d26d6b2d51eef21f02c8e1ceafe801fe991a89",
+    "windows/arm64/onnxruntime_providers_shared.dll": "aa6a5f21b054a909a980f8b1e231d201eb2c5bf96c9c65b151ee1e3ef8196a43",
+    "macos/libonnxruntime.1.23.2.dylib": "6fee21a0dbcaa98fe082cb4f7ed07ec5def439df36198f47b61dc205e7d2a1fa"
   }
 }

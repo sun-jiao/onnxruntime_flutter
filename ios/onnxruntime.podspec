@@ -9,7 +9,7 @@ Pod::Spec.new do |s|
   s.description      = <<-DESC
 OnnxRuntime plugin for Flutter apps.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://github.com/gtbluesky/onnxruntime_flutter'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Your Company' => 'email@example.com' }
 
@@ -20,8 +20,8 @@ OnnxRuntime plugin for Flutter apps.
   s.source           = { :path => '.' }
   # s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
-  s.dependency 'onnxruntime-objc', '1.15.1'
-  s.platform = :ios, '11.0'
+  s.dependency 'onnxruntime-objc', '1.30.0'
+  s.platform = :ios, '15.1'
   s.static_framework = true
 
   # Flutter.framework does not contain a i386 slice.
