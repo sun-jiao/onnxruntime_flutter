@@ -16,6 +16,7 @@ import 'package:onnxruntime/src/providers/ort_flags.dart';
 import 'package:onnxruntime/src/util/native_path.dart';
 import 'package:onnxruntime/src/util/native_memory.dart';
 import 'package:onnxruntime/src/util/model_metadata.dart';
+import 'package:onnxruntime/src/util/execution_provider.dart';
 
 class OrtSession {
   bool _released = false;
@@ -397,41 +398,13 @@ class OrtSessionOptions {
 
   bool _appendExecutionProvider2(
       OrtProvider provider, Map<String, String> providerOptions) {
-    return usingNative((arena) {
-      bg.OrtStatusPtr? statusPtr;
-      var providerName = '';
-      switch (provider) {
-        case OrtProvider.xnnpack:
-          providerName = 'XNNPACK';
-          break;
-        default:
-          return false;
-      }
-      final providerNamePtr =
-          providerName.toNativeUtf8(allocator: arena).cast<ffi.Char>();
-      var size = providerOptions.length;
-      final keyPtrPtr = arena<ffi.Pointer<ffi.Char>>(size);
-      final valuePtrPtr = arena<ffi.Pointer<ffi.Char>>(size);
-      var i = 0;
-      for (final entry in providerOptions.entries) {
-        keyPtrPtr[i] =
-            entry.key.toNativeUtf8(allocator: arena).cast<ffi.Char>();
-        valuePtrPtr[i] =
-            entry.value.toNativeUtf8(allocator: arena).cast<ffi.Char>();
-        ++i;
-      }
-      statusPtr = OrtEnv
-          .instance.ortApiPtr.ref.SessionOptionsAppendExecutionProvider
-          .asFunction<
-              bg.OrtStatusPtr Function(
-                  ffi.Pointer<bg.OrtSessionOptions>,
-                  ffi.Pointer<ffi.Char>,
-                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                  ffi.Pointer<ffi.Pointer<ffi.Char>>,
-                  int)>()(_ptr, providerNamePtr, keyPtrPtr, valuePtrPtr, size);
-      OrtStatus.checkOrtStatus(statusPtr);
-      return true;
-    });
+    return appendExecutionProvider(
+      OrtEnv.instance.ortApiPtr,
+      _ptr,
+      provider,
+      providerOptions,
+      availableProviders: OrtEnv.instance.availableProviders,
+    );
   }
 
   /// Appends cpu provider.
@@ -449,7 +422,10 @@ class OrtSessionOptions {
     return _appendExecutionProvider(OrtProvider.nnapi, flags);
   }
 
-  /// Appends QNN provider.
+  /// Appends QNN provider when available, otherwise returns false.
+  ///
+  /// A QNN-enabled runtime and its QnnHtp backend library must be installed.
+  /// Native registration errors are reported like other supported providers.
   bool appendQnnProvider() {
     return _appendExecutionProvider2(OrtProvider.qnn, {});
   }

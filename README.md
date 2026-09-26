@@ -78,3 +78,13 @@ outputs?.forEach((element) {
 OrtEnv.instance.release();
 ```
 
+
+### QNN execution provider
+
+`appendQnnProvider()` returns `false` when the loaded runtime does not include
+QNN. With a QNN-enabled runtime it registers `QNN` using the HTP backend's
+standard library name (`QnnHtp.dll` on Windows, `libQnnHtp.so` elsewhere).
+Install the matching Qualcomm backend and its dependencies on the native library
+search path. Native registration errors propagate as for the other providers.
+The bundled CPU runtimes do not acquire QNN support merely by calling this method.
+See the [upstream QNN documentation](https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html).

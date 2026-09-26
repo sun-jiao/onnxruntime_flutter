@@ -76,3 +76,9 @@ String tensor regressions cover inferred and explicit multidimensional shapes,
 row ordering, Unicode and empty strings, reshaping nested input, and synchronous
 and asynchronous inference with the existing STRING model. Scalar and flat
 string representations and mixed-element type errors remain unchanged.
+
+Provider regressions exercise QNN registration through a C API fixture, including
+native provider/backend names, unsupported-runtime fallback, error propagation,
+and temporary allocation cleanup. They also preserve XNNPACK option forwarding.
+Actual QNN acceleration requires a QNN-enabled runtime, matching Qualcomm backend
+libraries, and supported hardware; the fixture does not claim hardware coverage.
