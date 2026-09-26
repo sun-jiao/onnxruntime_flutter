@@ -99,3 +99,11 @@ model('empty_sequence', [
     node('SequenceEmpty', [], 'sequence'),
     node('Identity', ['input'], 'tensor'),
 ], [('sequence', sequence), ('tensor', tensor_type([1, 2]))])
+
+# Symbolic, anonymous dynamic, scalar and empty dimensions for model inspection.
+dynamic_type = message(1, integer(1, 1) + message(2,
+    message(1, message(2, 'batch')) + message(1, integer(1, 2))))
+model('dynamic_identity', [node('Identity', ['input'], 'output')],
+      [('output', dynamic_type)], inputs=[('input', dynamic_type)])
+model('scalar_identity', [node('Identity', ['input'], 'output')],
+      [('output', tensor_type([]))], inputs=[('input', tensor_type([]))])

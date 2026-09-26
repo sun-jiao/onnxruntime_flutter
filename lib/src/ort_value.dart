@@ -1,3 +1,5 @@
+import 'ort_types.dart';
+export 'ort_types.dart';
 import 'dart:ffi' as ffi;
 import 'dart:typed_data';
 
@@ -225,6 +227,17 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  ONNXTensorElementDataType get elementType {
+    _checkNotReleased();
+    return _info._tensorElementType;
+  }
+
+  List<int> get shape {
+    _checkNotReleased();
+    return List.unmodifiable(_info._tensorShape);
+  }
+
+
   late OrtTensorTypeAndShapeInfo _info;
   ffi.Pointer<ffi.Void> _dataPtr = ffi.nullptr;
   ffi.Allocator _dataAllocator = calloc;
@@ -888,106 +901,6 @@ class OrtTensorTypeAndShapeInfo {
 
       return count;
     });
-  }
-}
-
-enum ONNXTensorElementDataType {
-  undefined(
-      bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED),
-  float(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT),
-  uint8(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8),
-  int8(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8),
-  uint16(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16),
-  int16(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16),
-  int32(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32),
-  int64(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64),
-  string(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING),
-  bool(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL),
-  float16(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16),
-  double(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE),
-  uint32(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32),
-  uint64(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64),
-  complex64(
-      bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX64),
-  complex128(
-      bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128),
-  bFloat16(bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16);
-
-  final int value;
-
-  const ONNXTensorElementDataType(this.value);
-
-  static ONNXTensorElementDataType valueOf(int type) {
-    switch (type) {
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
-        return ONNXTensorElementDataType.float;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
-        return ONNXTensorElementDataType.uint8;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8:
-        return ONNXTensorElementDataType.int8;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
-        return ONNXTensorElementDataType.uint16;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16:
-        return ONNXTensorElementDataType.int16;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
-        return ONNXTensorElementDataType.int32;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
-        return ONNXTensorElementDataType.int64;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING:
-        return ONNXTensorElementDataType.string;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
-        return ONNXTensorElementDataType.bool;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
-        return ONNXTensorElementDataType.float16;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
-        return ONNXTensorElementDataType.double;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
-        return ONNXTensorElementDataType.uint32;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
-        return ONNXTensorElementDataType.uint64;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX64:
-        return ONNXTensorElementDataType.complex64;
-      case bg
-          .ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128:
-        return ONNXTensorElementDataType.complex128;
-      case bg.ONNXTensorElementDataType.ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16:
-        return ONNXTensorElementDataType.bFloat16;
-      default:
-        return ONNXTensorElementDataType.undefined;
-    }
-  }
-}
-
-enum ONNXType {
-  unknown(bg.ONNXType.ONNX_TYPE_UNKNOWN),
-  tensor(bg.ONNXType.ONNX_TYPE_TENSOR),
-  sequence(bg.ONNXType.ONNX_TYPE_SEQUENCE),
-  map(bg.ONNXType.ONNX_TYPE_MAP),
-  opaque(bg.ONNXType.ONNX_TYPE_OPAQUE),
-  sparseTensor(bg.ONNXType.ONNX_TYPE_SPARSETENSOR),
-  optional(bg.ONNXType.ONNX_TYPE_OPTIONAL);
-
-  final int value;
-
-  const ONNXType(this.value);
-
-  static ONNXType valueOf(int type) {
-    switch (type) {
-      case bg.ONNXType.ONNX_TYPE_TENSOR:
-        return ONNXType.tensor;
-      case bg.ONNXType.ONNX_TYPE_SEQUENCE:
-        return ONNXType.sequence;
-      case bg.ONNXType.ONNX_TYPE_MAP:
-        return ONNXType.map;
-      case bg.ONNXType.ONNX_TYPE_OPAQUE:
-        return ONNXType.opaque;
-      case bg.ONNXType.ONNX_TYPE_SPARSETENSOR:
-        return ONNXType.sparseTensor;
-      case bg.ONNXType.ONNX_TYPE_OPTIONAL:
-        return ONNXType.optional;
-      default:
-        return ONNXType.unknown;
-    }
   }
 }
 

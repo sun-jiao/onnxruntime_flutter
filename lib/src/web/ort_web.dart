@@ -12,6 +12,10 @@ import '../ort_provider.dart';
 import '../providers/ort_flags.dart';
 import '../util/list_shape_extension.dart';
 import 'model_info.dart';
+import '../ort_model_info.dart';
+
+import '../ort_types.dart';
+export '../ort_types.dart';
 
 part 'env.dart';
 part 'session.dart';

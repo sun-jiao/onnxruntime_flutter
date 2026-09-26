@@ -21,6 +21,32 @@ abstract class OrtValue {
 }
 
 class OrtValueTensor extends OrtValue {
+  List<int> get shape {
+    _check();
+    return List.unmodifiable(_tensor.dims.toDart.map((d) => d.toDartInt));
+  }
+
+  ONNXTensorElementDataType get elementType {
+    _check();
+    const names = {
+      'float32': 1,
+      'uint8': 2,
+      'int8': 3,
+      'uint16': 4,
+      'int16': 5,
+      'int32': 6,
+      'int64': 7,
+      'string': 8,
+      'bool': 9,
+      'float16': 10,
+      'float64': 11,
+      'uint32': 12,
+      'uint64': 13,
+      'bfloat16': 16,
+    };
+    return ONNXTensorElementDataType.valueOf(names[_tensor.type.toDart] ?? 0);
+  }
+
   late final _Tensor _tensor;
   OrtValueTensor(Object ptr, [Object? dataPtr]) {
     _nativeOnly('OrtValueTensor pointer constructor');

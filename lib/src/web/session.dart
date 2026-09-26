@@ -48,6 +48,38 @@ class OrtSession {
   List<String> get outputNames => List.of(_info.outputs);
   OrtIsolateSession? get isolateSession => null;
 
+  List<OrtValueInfo> get inputInfo {
+    _check();
+    return _info.inputInfo;
+  }
+
+  List<OrtValueInfo> get outputInfo {
+    _check();
+    return _info.outputInfo;
+  }
+
+  void validateInputs(Map<String, OrtValue> inputs) {
+    _check();
+    validateOrtInputs(
+      inputInfo,
+      inputs.map((name, value) {
+        value._check();
+        if (value is! OrtValueTensor) {
+          throw UnsupportedError('Web validation supports tensor inputs only.');
+        }
+        return MapEntry(
+          name,
+          OrtValueInfo(
+            name,
+            ONNXType.tensor,
+            elementType: value.elementType,
+            shape: value.shape,
+          ),
+        );
+      }),
+    );
+  }
+
   List<OrtValue?> run(
     OrtRunOptions runOptions,
     Map<String, OrtValue> inputs, [

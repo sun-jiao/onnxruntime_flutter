@@ -200,3 +200,26 @@ After `flutter pub get`, run `python3 tool/run_native_tests.py` on a desktop hos
 The runner selects the correct native library for the host architecture.
 See [test coverage and CI](test/README.md) for packaging tests, the native runtime
 matrix, and device-validation limits.
+
+### Model descriptions and opt-in validation
+
+`session.inputInfo` and `session.outputInfo` return immutable `OrtValueInfo`
+objects with `name`, ONNX `type`, tensor `elementType`, `shape` and
+`symbolicDimensions`. Dynamic dimensions are `null`; scalar shapes are `[]`.
+The Web parser preserves unknown rank as a null shape. Native descriptions use
+ORT's reported dimensions. Sequence/map descriptions expose the top-level kind,
+not their nested element schema. Descriptions are queried explicitly and reject
+access after session release.
+
+```dart
+final info = session.inputInfo.first;
+print('${info.name}: ${info.elementType} ${info.shape}');
+session.validateInputs(inputs); // Throws ArgumentError for a mismatch.
+```
+
+Validation checks required input names, top-level types, tensor element types,
+rank and fixed dimensions. Dynamic dimensions accept any size; symbolic names
+are descriptive, not cross-input constraints. Initializers are excluded from
+required inputs. Nested complex values are validated by ORT. Existing `run` and
+`runAsync` do not automatically invoke this validation. Tensor `shape` and
+`elementType` getters are also available without extracting its data.

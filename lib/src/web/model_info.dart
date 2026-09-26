@@ -1,12 +1,22 @@
+import '../ort_model_info.dart';
+import '../ort_types.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
-/// Reads only graph names and custom metadata from the ONNX protobuf. Weights
+/// Reads graph names, value descriptions and custom metadata. Weights
 /// are skipped without copying. This keeps synchronous constructor/getter APIs
 /// while ONNX Runtime Web creates its actual session asynchronously on first run.
 class ModelInfo {
   final inputs = <String>[];
   final outputs = <String>[];
+  final _inputTypes = <String, Uint8List>{};
+  final _outputTypes = <String, Uint8List>{};
+  List<OrtValueInfo> get inputInfo => List.unmodifiable(
+    inputs.map((name) => _valueInfo(name, _inputTypes[name]!)),
+  );
+  List<OrtValueInfo> get outputInfo => List.unmodifiable(
+    outputs.map((name) => _valueInfo(name, _outputTypes[name]!)),
+  );
   final metadata = <String, String>{};
   ModelInfo._();
 
@@ -51,10 +61,16 @@ class ModelInfo {
       if (graph.wire == 2) {
         switch (graph.field) {
           case 11:
-            inputs.add(_name(graph.message(), 1));
+            final bytes = graph.message();
+            final name = _name(bytes, 1);
+            inputs.add(name);
+            _inputTypes[name] = Uint8List.fromList(bytes);
             continue;
           case 12:
-            outputs.add(_name(graph.message(), 1));
+            final bytes = graph.message();
+            final name = _name(bytes, 1);
+            outputs.add(name);
+            _outputTypes[name] = Uint8List.fromList(bytes);
             continue;
           case 5:
             initializers.add(_name(graph.message(), 8));
@@ -74,6 +90,79 @@ class ModelInfo {
       graph.skip();
     }
     inputs.removeWhere(initializers.contains);
+  }
+
+  static OrtValueInfo _valueInfo(String name, Uint8List bytes) {
+    final value = _Proto(bytes);
+    while (value.next()) {
+      if (value.field != 2 || value.wire != 2) {
+        value.skip();
+        continue;
+      }
+      final type = _Proto(value.message());
+      while (type.next()) {
+        final kinds = {
+          1: ONNXType.tensor,
+          4: ONNXType.sequence,
+          5: ONNXType.map,
+          8: ONNXType.sparseTensor,
+          9: ONNXType.optional,
+        };
+        final kind = kinds[type.field];
+        if (kind == null || type.wire != 2) {
+          type.skip();
+          continue;
+        }
+        if (kind != ONNXType.tensor && kind != ONNXType.sparseTensor) {
+          return OrtValueInfo(name, kind);
+        }
+        final tensor = _Proto(type.message());
+        ONNXTensorElementDataType? dtype;
+        List<int?>? shape;
+        List<String?>? symbols;
+        while (tensor.next()) {
+          if (tensor.field == 1 && tensor.wire == 0) {
+            dtype = ONNXTensorElementDataType.valueOf(tensor._uint32());
+          } else if (tensor.field == 2 && tensor.wire == 2) {
+            shape = [];
+            symbols = [];
+            final dims = _Proto(tensor.message());
+            while (dims.next()) {
+              if (dims.field != 1 || dims.wire != 2) {
+                dims.skip();
+                continue;
+              }
+              final dim = _Proto(dims.message());
+              int? size;
+              String? symbol;
+              while (dim.next()) {
+                if (dim.field == 1 && dim.wire == 0) {
+                  size = dim._dimension();
+                  symbol = null;
+                } else if (dim.field == 2 && dim.wire == 2) {
+                  symbol = utf8.decode(dim.message());
+                  size = null;
+                } else {
+                  dim.skip();
+                }
+              }
+              shape.add(size);
+              symbols.add(symbol);
+            }
+          } else {
+            tensor.skip();
+          }
+        }
+        return OrtValueInfo(
+          name,
+          kind,
+          elementType: dtype,
+          shape: shape,
+          symbolicDimensions: symbols,
+        );
+      }
+    }
+    return OrtValueInfo(name, ONNXType.unknown);
   }
 
   static String _name(Uint8List bytes, int field) {
@@ -115,6 +204,22 @@ class _Proto {
       multiplier *= 128;
     }
     throw const FormatException('Invalid protobuf varint.');
+  }
+
+  int _dimension() {
+    var value = BigInt.zero;
+    for (var i = 0; i < 10; i++) {
+      final byte = _byte();
+      if (i == 9 && byte > 1) throw const FormatException('Invalid dimension.');
+      value |= BigInt.from(byte & 127) << (7 * i);
+      if (byte < 128) {
+        if (value > BigInt.from(9007199254740991)) {
+          throw const FormatException('Dimension exceeds exact integer range.');
+        }
+        return value.toInt();
+      }
+    }
+    throw const FormatException('Invalid dimension.');
   }
 
   bool next() {

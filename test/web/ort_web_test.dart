@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import '../model_info_checks.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -57,6 +58,13 @@ void main() {
     wasm.setProperty('wasmPaths'.toJS, '$_base/'.toJS);
     wasm.setProperty('numThreads'.toJS, 1.toJS);
     OrtEnv.instance.init();
+  });
+
+  test('model descriptions and opt-in validation', () async {
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(await _model('dynamic_identity.onnx'), options);
+    options.release();
+    try { checkModelInfo(session); } finally { session.release(); }
   });
 
   test('runtime, providers, options and unsupported native operations', () {

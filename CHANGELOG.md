@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add opt-in model input/output descriptions, tensor shape/type getters and input validation on native and Web backends.
+
 - Add a conditional ONNX Runtime Web WASM backend while retaining the native Dart API.
 - Support existing asynchronous tensor inference, model names/metadata and release calls on Web.
 - Add a runnable Web example and browser regression tests; document Web-specific limitations.

@@ -4,3 +4,5 @@ export 'src/ort_native.dart'
     if (dart.library.js_interop) 'src/web/ort_web.dart';
 export 'src/ort_provider.dart';
 export 'src/providers/ort_flags.dart';
+
+export 'src/ort_model_info.dart' show OrtValueInfo;

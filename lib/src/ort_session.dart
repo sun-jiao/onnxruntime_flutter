@@ -1,3 +1,5 @@
+import 'ort_model_info.dart';
+import 'util/session_type_info.dart';
 import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'dart:typed_data';
@@ -44,6 +46,58 @@ class OrtSession {
   int get outputCount => _outputCount;
   List<String> get outputNames => _outputNames;
   OrtIsolateSession? get isolateSession => _isolateSession;
+
+  /// Reads model input descriptions without changing inference behavior.
+  List<OrtValueInfo> get inputInfo {
+    _checkNotReleased();
+    return List.unmodifiable(
+      List.generate(
+        _inputCount,
+        (i) => readSessionValueInfo(_ptr, i, _inputNames[i], true),
+      ),
+    );
+  }
+
+  List<OrtValueInfo> get outputInfo {
+    _checkNotReleased();
+    return List.unmodifiable(
+      List.generate(
+        _outputCount,
+        (i) => readSessionValueInfo(_ptr, i, _outputNames[i], false),
+      ),
+    );
+  }
+
+  /// Opt-in validation; existing run methods do not call this method.
+  void validateInputs(Map<String, OrtValue> inputs) {
+    _checkNotReleased();
+    validateOrtInputs(
+      inputInfo,
+      inputs.map((name, value) {
+        value.address; // Reject released wrappers.
+        return MapEntry(
+          name,
+          value is OrtValueTensor
+              ? OrtValueInfo(
+                name,
+                ONNXType.tensor,
+                elementType: value.elementType,
+                shape: value.shape,
+              )
+              : OrtValueInfo(
+                name,
+                value is OrtValueSequence
+                    ? ONNXType.sequence
+                    : value is OrtValueMap
+                    ? ONNXType.map
+                    : value is OrtValueSparseTensor
+                    ? ONNXType.sparseTensor
+                    : ONNXType.unknown,
+              ),
+        );
+      }),
+    );
+  }
 
   /// Creates a session from a file.
   OrtSession.fromFile(File modelFile, OrtSessionOptions options) {
