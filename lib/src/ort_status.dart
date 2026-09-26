@@ -92,3 +92,10 @@ enum _OrtErrorCode {
     }
   }
 }
+
+// Internal bridge: preserve the legacy synchronous exception type.
+int? inferenceErrorCode(Object error) =>
+    error is _OrtException ? error.code.value : null;
+
+String inferenceErrorMessage(Object error) =>
+    error is _OrtException ? (error.message ?? error.toString()) : error.toString();

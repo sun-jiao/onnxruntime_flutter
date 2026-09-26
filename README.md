@@ -223,3 +223,19 @@ are descriptive, not cross-input constraints. Initializers are excluded from
 required inputs. Nested complex values are validated by ORT. Existing `run` and
 `runAsync` do not automatically invoke this validation. Tensor `shape` and
 `elementType` getters are also available without extracting its data.
+
+### Strict asynchronous inference
+
+Use `await session.runAsyncOrThrow(runOptions, inputs, outputNames)` to receive
+inference failures as `OrtInferenceException` instead of `[]`. It has the same
+output ordering and ownership as `runAsync`; `outputNames` remains optional.
+The exception includes `message`, `backend`, `requestId`, `remoteStackTrace`,
+and a native ORT `code` when available (null for Web and Dart-side errors).
+Calling a released session rejects with `StateError` before accepting a request.
+
+Strict and legacy requests share the same worker/queue. One failed request does
+not prevent later inference, and accepted requests complete before session
+release. Keep input tensors and run options alive until their futures complete,
+and release each returned output. Existing `runAsync` still returns `[]` on
+failure; `run` keeps its original exceptions. No automatic input validation is
+added by the strict API; call `validateInputs` explicitly if desired.

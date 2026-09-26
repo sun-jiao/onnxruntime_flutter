@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add runAsyncOrThrow and structured asynchronous inference diagnostics without changing legacy empty-list failures.
+
 - Add opt-in model input/output descriptions, tensor shape/type getters and input validation on native and Web backends.
 
 - Add a conditional ONNX Runtime Web WASM backend while retaining the native Dart API.

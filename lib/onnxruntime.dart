@@ -6,3 +6,4 @@ export 'src/ort_provider.dart';
 export 'src/providers/ort_flags.dart';
 
 export 'src/ort_model_info.dart' show OrtValueInfo;
+export 'src/ort_inference_exception.dart';

@@ -183,6 +183,22 @@ void main() {
     expect(session.isolateSession!.state, IsolateSessionState.idle);
   });
 
+  test('strict worker exit rejects pending and later requests with diagnostics',
+      () async {
+    final input = inputFor(0);
+    remember(await session.runAsyncOrThrow(runOptions, input));
+    final matcher = throwsA(isA<OrtInferenceException>()
+        .having((e) => e.backend, 'backend', 'native')
+        .having((e) => e.message, 'message', contains('stopped')));
+    await Future.wait([
+      expectLater(session.runAsyncOrThrow(runOptions, input,
+          _ExitOnReadOutputNames()), matcher),
+      expectLater(session.runAsyncOrThrow(runOptions, input), matcher),
+    ]).timeout(const Duration(seconds: 5));
+    await expectLater(session.runAsyncOrThrow(runOptions, input), matcher);
+    expect(await session.runAsync(runOptions, input), isEmpty);
+  });
+
   test('worker exit completes pending and subsequent requests without hanging',
       () async {
     final input = inputFor(0);

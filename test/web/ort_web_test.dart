@@ -2,6 +2,7 @@
 library;
 
 import '../model_info_checks.dart';
+import '../strict_async_checks.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -65,6 +66,13 @@ void main() {
     final session = OrtSession.fromBuffer(await _model('dynamic_identity.onnx'), options);
     options.release();
     try { checkModelInfo(session); } finally { session.release(); }
+  });
+
+  test('strict asynchronous failures, concurrent requests and recovery', () async {
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
+    options.release();
+    await checkStrictAsync(session, web: true);
   });
 
   test('runtime, providers, options and unsupported native operations', () {

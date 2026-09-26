@@ -7,6 +7,7 @@ class OrtSession {
   late final JSObject _options;
   int? _threads;
   _Session? _session;
+  int _nextRequestId = 0;
   Future<void> _tail = Future<void>.value();
 
   OrtSession.fromBuffer(Uint8List modelBuffer, OrtSessionOptions options) {
@@ -106,11 +107,27 @@ class OrtSession {
     return result;
   }
 
+  /// Strict counterpart of runAsync. A rejected request never poisons the queue.
+  Future<List<OrtValue?>> runAsyncOrThrow(
+    OrtRunOptions runOptions, Map<String, OrtValue> inputs,
+    [List<String>? outputNames]) async {
+    _check();
+    final selected = List<String>.of(outputNames ?? _info.outputs);
+    final feeds = Map<String, OrtValue>.of(inputs);
+    final requestId = _nextRequestId++;
+    final result = _tail.then((_) => _run(runOptions, feeds, selected,
+        strict: true, requestId: requestId));
+    _tail = result.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    return result;
+  }
+
   Future<List<OrtValue?>> _run(
     OrtRunOptions runOptions,
     Map<String, OrtValue> inputs,
-    List<String> names,
-  ) async {
+    List<String> names, {
+    bool strict = false,
+    int? requestId,
+  }) async {
     JSObject? result;
     final outputs = <OrtValue?>[];
     try {
@@ -160,9 +177,13 @@ class OrtSession {
         outputs.add(OrtValueTensor._copy(tensor));
       }
       return outputs;
-    } catch (error) {
+    } catch (error, stack) {
       for (final output in outputs) {
         output?.release();
+      }
+      if (strict) {
+        throw OrtInferenceException(error.toString(), requestId: requestId,
+            backend: 'web', remoteStackTrace: stack.toString());
       }
       // Match the native isolate's existing asynchronous failure contract.
       debugPrint('ONNX Runtime Web inference failed: $error');

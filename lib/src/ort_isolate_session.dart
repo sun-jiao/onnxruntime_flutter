@@ -1,3 +1,5 @@
+import 'ort_inference_exception.dart';
+import 'ort_status.dart' show inferenceErrorCode, inferenceErrorMessage;
 import 'dart:async';
 import 'dart:isolate';
 
@@ -103,19 +105,32 @@ class OrtIsolateSession {
         }).toList();
         rootIsolateSendPort
             .send(_IsolateSessionResult(data.requestId, outputs));
-      } catch (_) {
-        // Keep failures scoped to their request and preserve the [] result.
-        rootIsolateSendPort.send(_IsolateSessionResult(data.requestId, []));
+      } catch (error, stack) {
+        rootIsolateSendPort.send(_IsolateSessionResult(data.requestId, [],
+          OrtInferenceException(inferenceErrorMessage(error),
+            code: inferenceErrorCode(error), requestId: data.requestId,
+            backend: 'native', remoteStackTrace: stack.toString())));
       }
     }
   }
 
   Future<List<OrtValue?>> run(
       OrtRunOptions runOptions, Map<String, OrtValue> inputs,
-      [List<String>? outputNames]) async {
+      [List<String>? outputNames]) =>
+      _run(runOptions, inputs, outputNames, false);
+
+  Future<List<OrtValue?>> runOrThrow(
+      OrtRunOptions runOptions, Map<String, OrtValue> inputs,
+      [List<String>? outputNames]) =>
+      _run(runOptions, inputs, outputNames, true);
+
+  Future<List<OrtValue?>> _run(OrtRunOptions runOptions,
+      Map<String, OrtValue> inputs, List<String>? outputNames, bool strict) async {
     if (_released) {
+      if (strict) throw StateError('The inference isolate has been released.');
       return [];
     }
+    final requestId = _nextRequestId++;
     ++_activeRuns;
     try {
       // Concurrent first calls must share the same worker and handshake.
@@ -129,7 +144,6 @@ class OrtIsolateSession {
       final transformedInputs =
           inputs.map((key, value) => MapEntry(key, _IsolateInputValue(value)));
       _state = IsolateSessionState.loading;
-      final requestId = _nextRequestId++;
       final data = _IsolateSessionData(
           requestId: requestId,
           session: address,
@@ -141,6 +155,7 @@ class OrtIsolateSession {
           .firstWhere((result) => result.requestId == requestId);
       _newIsolateSendPort.send(data);
       final result = await response;
+      if (result.error != null) throw result.error!;
       final outputs = result.outputs.map((e) {
         final onnxType = ONNXType.valueOf(e.key);
         switch (onnxType) {
@@ -158,11 +173,17 @@ class OrtIsolateSession {
       }).toList();
       _state = IsolateSessionState.idle;
       return outputs;
-    } catch (e) {
+    } catch (e, stack) {
       if (!_initialized) {
         _initialization = null;
       }
       _state = IsolateSessionState.idle;
+      if (strict) {
+        if (e is OrtInferenceException) rethrow;
+        throw OrtInferenceException(inferenceErrorMessage(e),
+            code: inferenceErrorCode(e), requestId: requestId,
+            backend: 'native', remoteStackTrace: stack.toString());
+      }
       return [];
     } finally {
       if (--_activeRuns == 0) {
@@ -215,7 +236,9 @@ class _IsolateSessionData {
 }
 
 class _IsolateSessionResult {
-  _IsolateSessionResult(this.requestId, this.outputs);
+  _IsolateSessionResult(this.requestId, this.outputs, [this.error]);
+
+  final OrtInferenceException? error;
 
   final int requestId;
   final List<MapEntry> outputs;

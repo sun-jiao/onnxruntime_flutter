@@ -343,6 +343,16 @@ class OrtSession {
     return _isolateSession?.run(runOptions, inputs, outputNames);
   }
 
+  /// Like runAsync, but preserves failures instead of returning an empty list.
+  /// Inputs and run options must remain alive until the returned future completes.
+  Future<List<OrtValue?>> runAsyncOrThrow(
+      OrtRunOptions runOptions, Map<String, OrtValue> inputs,
+      [List<String>? outputNames]) async {
+    _checkNotReleased();
+    _isolateSession ??= OrtIsolateSession(this);
+    return _isolateSession!.runOrThrow(runOptions, inputs, outputNames);
+  }
+
   String getMetadatas(String key) {
     _checkNotReleased();
     return readModelMetadata(
