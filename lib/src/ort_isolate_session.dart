@@ -83,8 +83,8 @@ class OrtIsolateSession {
       try {
         final session = OrtSession.fromAddress(data.session);
         final runOptions = OrtRunOptions.fromAddress(data.runOptions);
-        final inputs = data.inputs.map(
-            (key, value) => MapEntry(key, OrtValueTensor.fromAddress(value)));
+        final inputs =
+            data.inputs.map((key, value) => MapEntry(key, value.restore()));
         final outputNames = data.outputNames;
         final outputs = session.run(runOptions, inputs, outputNames).map((e) {
           ONNXType onnxType;
@@ -127,7 +127,7 @@ class OrtIsolateSession {
         throw StateError('The inference isolate has stopped.');
       }
       final transformedInputs =
-          inputs.map((key, value) => MapEntry(key, value.address));
+          inputs.map((key, value) => MapEntry(key, _IsolateInputValue(value)));
       _state = IsolateSessionState.loading;
       final requestId = _nextRequestId++;
       final data = _IsolateSessionData(
@@ -210,7 +210,7 @@ class _IsolateSessionData {
   final int requestId;
   final int session;
   final int runOptions;
-  final Map<String, int> inputs;
+  final Map<String, _IsolateInputValue> inputs;
   final List<String>? outputNames;
 }
 
@@ -219,4 +219,33 @@ class _IsolateSessionResult {
 
   final int requestId;
   final List<MapEntry> outputs;
+}
+
+// Input handles remain owned by the caller; worker wrappers only borrow them.
+class _IsolateInputValue {
+  _IsolateInputValue(OrtValue value)
+      : address = value.address,
+        type = value is OrtValueSequence
+            ? ONNXType.sequence
+            : value is OrtValueMap
+                ? ONNXType.map
+                : value is OrtValueSparseTensor
+                    ? ONNXType.sparseTensor
+                    : ONNXType.tensor;
+
+  final int address;
+  final ONNXType type;
+
+  OrtValue restore() {
+    switch (type) {
+      case ONNXType.sequence:
+        return OrtValueSequence.fromAddress(address);
+      case ONNXType.map:
+        return OrtValueMap.fromAddress(address);
+      case ONNXType.sparseTensor:
+        return OrtValueSparseTensor.fromAddress(address);
+      default:
+        return OrtValueTensor.fromAddress(address);
+    }
+  }
 }

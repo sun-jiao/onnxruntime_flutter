@@ -63,6 +63,13 @@ SparseTensor retains its existing `value` behavior: initialized sparse formats
 return `null`; an undefined format throws. This change does not introduce a new
 sparse-data representation.
 
+Complex-input regressions use `sequence_input.onnx`, `map_input.onnx` and
+`sparse_input.onnx` to compare synchronous and asynchronous inference. They cover
+mixed tensor/complex inputs, concurrent cold and warm requests, output ordering,
+per-request failures returning `[]`, recovery and caller-owned input lifetimes.
+Sequence Identity uses opset 16; the other input fixtures use opset 13. Sparse
+outputs retain their existing `null` value representation.
+
 Metadata regressions use `fixtures/metadata.onnx` to preserve normal, empty,
 Unicode and NUL-terminated values, and the existing `UnsupportedError` for a
 missing key. A separate C API fixture counts metadata/string destruction and

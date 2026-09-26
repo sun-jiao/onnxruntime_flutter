@@ -1,7 +1,7 @@
 """Generate tiny ONNX fixtures using only Python's standard library.
 
 Wire fields follow https://github.com/onnx/onnx/blob/v1.14.0/onnx/onnx.proto.
-IR 8 / opset 13 are supported by the bundled ONNX Runtime 1.15.1.
+Fixtures use IR 8 / opset 13 or 16 (sequence Identity requires opset 16).
 Run: python3 test/fixtures/generate_complex_outputs.py
 """
 from pathlib import Path
@@ -44,11 +44,13 @@ def node(op, inputs, output, attributes=b'', domain=''):
             + (message(7, domain) if domain else b''))
 
 
-def model(name, nodes, outputs, ml=False, metadata=()):
+def model(name, nodes, outputs, ml=False, metadata=(), inputs=None, opset=13):
+    if inputs is None:
+        inputs = [('input', tensor_type([1, 2]))]
     graph = (b''.join(message(1, n) for n in nodes) + message(2, name)
-             + message(11, value_info('input', tensor_type([1, 2])))
+             + b''.join(message(11, value_info(n, t)) for n, t in inputs)
              + b''.join(message(12, value_info(n, t)) for n, t in outputs))
-    result = integer(1, 8) + message(7, graph) + message(8, integer(2, 13))
+    result = integer(1, 8) + message(7, graph) + message(8, integer(2, opset))
     if ml:
         result += message(8, message(1, 'ai.onnx.ml') + integer(2, 1))
     for key, value in metadata:
@@ -75,3 +77,20 @@ model('metadata', [node('Identity', ['input'], 'output')],
           ('author', 'onnxruntime_flutter'), ('empty', ''),
           ('说明🧠', '中文元数据🧠'), ('nul', 'prefix\0suffix'),
       ])
+
+# Mixed complex/tensor inputs exercise worker restoration and output ordering.
+sequence = sequence_type(tensor_type([1, 2]))
+model('sequence_input', [
+    node('Identity', ['input'], 'sequence'),
+    node('Identity', ['tensor_input'], 'tensor'),
+], [('sequence', sequence), ('tensor', tensor_type([1, 2]))],
+    inputs=[('input', sequence), ('tensor_input', tensor_type([1, 2]))], opset=16)
+
+# A graph input can also be an output without requiring a map-specific operator.
+model('map_input', [node('Identity', ['tensor_input'], 'tensor')],
+      [('input', map_type), ('tensor', tensor_type([1, 2]))],
+      inputs=[('input', map_type), ('tensor_input', tensor_type([1, 2]))])
+
+sparse = message(8, integer(1, 1) + message(2,
+    message(1, integer(1, 2)) + message(1, integer(1, 2))))
+model('sparse_input', [], [('input', sparse)], inputs=[('input', sparse)])

@@ -107,6 +107,134 @@ void main() {
     }
   });
 
+  test('sparse input handles survive synchronous and asynchronous inference',
+      () async {
+    final options = OrtSessionOptions()..setIntraOpNumThreads(1);
+    final session =
+        OrtSession.fromFile(File('test/fixtures/sparse_input.onnx'), options);
+    final runOptions = OrtRunOptions();
+    final input = OrtValueSparseTensor(_createSparse(true));
+    final outputs = <OrtValue?>[];
+    try {
+      outputs.addAll(session.run(runOptions, {'input': input}));
+      outputs.addAll(await session.runAsync(runOptions, {'input': input})!);
+      expect(outputs, hasLength(2));
+      for (final output in outputs) {
+        expect(output, isA<OrtValueSparseTensor>());
+        // Sparse value extraction remains unimplemented and returns null.
+        expect(output!.value, isNull);
+        expect(output.address, isNot(input.address));
+      }
+      expect(input.value, isNull);
+    } finally {
+      final worker = session.isolateSession;
+      session.release();
+      await worker?.release();
+      for (final output in outputs) {
+        output?.release();
+      }
+      input.release();
+      runOptions.release();
+      options.release();
+    }
+  });
+
+  for (final sequence in [true, false]) {
+    test('${sequence ? 'sequence' : 'map'} inputs match sync inference',
+        () async {
+      final options = OrtSessionOptions()..setIntraOpNumThreads(1);
+      final fixture = sequence ? 'sequence_input' : 'map_input';
+      final session =
+          OrtSession.fromFile(File('test/fixtures/$fixture.onnx'), options);
+      final runOptions = OrtRunOptions();
+      final ownedInputs = <OrtValue>[];
+      final ownedOutputs = <OrtValue?>[];
+      try {
+        // Concurrent first calls and a second batch after worker initialization.
+        for (var batch = 0; batch < 2; batch++) {
+          final pending = <Future<List<OrtValue?>>>[];
+          final expected = <List<Object?>>[];
+          for (var i = 0; i < 3; i++) {
+            final number = (batch * 10 + i + 1).toDouble();
+            final tensor = OrtValueTensor.createTensorWithDataList(
+                Float32List.fromList([number, number + 1]), [1, 2]);
+            ownedInputs.add(tensor);
+            final OrtValue complex;
+            final Object complexValue;
+            if (sequence) {
+              complex = OrtValueSequence(
+                  _createValue([tensor, tensor], ONNXType.sequence));
+              complexValue = [
+                [
+                  [number, number + 1]
+                ],
+                [
+                  [number, number + 1]
+                ],
+              ];
+            } else {
+              final keys = OrtValueTensor.createTensorWithDataList([10, 20]);
+              final values = OrtValueTensor.createTensorWithDataList(
+                  Float32List.fromList([number, number + 1]));
+              ownedInputs.addAll([keys, values]);
+              complex = OrtValueMap(_createValue([keys, values], ONNXType.map));
+              complexValue = {10: number, 20: number + 1};
+            }
+            ownedInputs.add(complex);
+            final inputs = {'input': complex, 'tensor_input': tensor};
+            final names =
+                i.isEven ? null : session.outputNames.reversed.toList();
+            final ordered = <Object?>[
+              complexValue,
+              [
+                [number, number + 1]
+              ]
+            ];
+            final values = names == null ? ordered : ordered.reversed.toList();
+            final sync = session.run(runOptions, inputs, names);
+            ownedOutputs.addAll(sync);
+            expect(sync.map((value) => _read(value!)).toList(), values);
+            expected.add(values);
+            pending.add(session.runAsync(runOptions, inputs, names)!);
+          }
+          // Failures must remain local to their request and preserve [].
+          final invalid = session.runAsync(runOptions, {})!;
+          final results =
+              await Future.wait(pending).timeout(const Duration(seconds: 5));
+          for (final result in results) {
+            ownedOutputs.addAll(result);
+          }
+          expect(await invalid.timeout(const Duration(seconds: 5)), isEmpty);
+          for (var i = 0; i < results.length; i++) {
+            expect(
+                results[i].map((value) => _read(value!)).toList(), expected[i]);
+          }
+          final addresses = results
+              .expand((result) => result)
+              .map((value) => value!.address)
+              .toList();
+          expect(addresses.toSet().length, addresses.length);
+        }
+        // Worker restoration must not release or alter caller-owned inputs.
+        for (final input in ownedInputs) {
+          expect(_read(input), isNotNull);
+        }
+      } finally {
+        final worker = session.isolateSession;
+        session.release();
+        await worker?.release();
+        for (final output in ownedOutputs) {
+          output?.release();
+        }
+        for (final input in ownedInputs.reversed) {
+          input.release();
+        }
+        runOptions.release();
+        options.release();
+      }
+    });
+  }
+
   for (final fixture in ['tensor_sequence', 'map_sequence']) {
     test('$fixture has equivalent synchronous and asynchronous outputs',
         () async {
