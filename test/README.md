@@ -76,6 +76,14 @@ row ordering, Unicode and empty strings, reshaping nested input, and synchronous
 and asynchronous inference with the existing STRING model. Scalar and flat
 string representations and mixed-element type errors remain unchanged.
 
+Tensor shape regressions reject ragged inferred shapes, extra numeric/bool
+elements that would be discarded, and missing string elements that would become
+empty strings. These newly rejected inputs throw `ArgumentError`. Explicit shapes
+still permit flattening and reshaping nested input, including ragged lists when
+the element count matches. Existing native errors for undersized numeric buffers,
+out-of-bounds string writes and negative dimensions are preserved. Tests also
+verify scalar/empty tensor compatibility and cleanup after shape rejection.
+
 Provider regressions exercise QNN registration through a C API fixture, including
 native provider/backend names, unsupported-runtime fallback, error propagation,
 and temporary allocation cleanup. They also preserve XNNPACK option forwarding.

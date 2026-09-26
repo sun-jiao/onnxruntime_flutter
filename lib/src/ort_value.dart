@@ -242,12 +242,52 @@ class OrtValueTensor extends OrtValue {
     return OrtValueTensor(ffi.Pointer.fromAddress(address));
   }
 
+  // Only inferred shapes require rectangular nesting. An explicit shape may
+  // intentionally reshape any nested input after flattening it.
+  static void _validateInferredShape(List data, List<int> shape,
+      [int depth = 0]) {
+    if (depth >= shape.length || data.length != shape[depth]) {
+      throw ArgumentError.value(
+          data, 'data', 'Cannot infer a rectangular shape.');
+    }
+    for (final item in data) {
+      if (item is List) {
+        _validateInferredShape(item, shape, depth + 1);
+      } else if (depth != shape.length - 1) {
+        throw ArgumentError.value(
+            data, 'data', 'Cannot infer a rectangular shape.');
+      }
+    }
+  }
+
+  // Keep native errors for negative dimensions, undersized numeric buffers and
+  // out-of-bounds string writes. Reject the opposite mismatches that ORT accepts
+  // by ignoring extra numeric data or leaving string elements unfilled.
+  static void _validatePreviouslyAcceptedShape(
+      List<int> shape, int elementCount,
+      {required bool strings}) {
+    var expected = BigInt.one;
+    for (final dimension in shape) {
+      if (dimension < 0) {
+        return;
+      }
+      expected *= BigInt.from(dimension);
+    }
+    final actual = BigInt.from(elementCount);
+    if (strings ? expected > actual : expected < actual) {
+      throw ArgumentError.value(shape, 'shape',
+          'Expected $expected elements, but received $elementCount.');
+    }
+  }
+
   static OrtValueTensor _createTensorWithString(String data) {
     return _createTensorWithStringList(<String>[data], []);
   }
 
   static OrtValueTensor _createTensorWithStringList(List<String> data,
       [List<int>? shape]) {
+    final selectedShape = shape ?? data.shape;
+    _validatePreviouslyAcceptedShape(selectedShape, data.length, strings: true);
     return usingNative((arena) {
       final ortValuePtrPtr = arena<ffi.Pointer<bg.OrtValue>>();
       var transferred = false;
@@ -258,7 +298,6 @@ class OrtValueTensor extends OrtValue {
               ortValuePtrPtr.value);
         }
       });
-      final selectedShape = shape ?? data.shape;
       final shapeSize = selectedShape.length;
       final shapePtr = arena<ffi.Int64>(shapeSize);
       shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, selectedShape);
@@ -313,6 +352,9 @@ class OrtValueTensor extends OrtValue {
       [List<int>? shape]) {
     return usingNative((arena) {
       final selectedShape = shape ?? data.shape;
+      if (shape == null && data.isNotEmpty) {
+        _validateInferredShape(data, selectedShape);
+      }
       final element = data.element();
       var dataType = ONNXTensorElementDataType.undefined;
       ffi.Pointer<ffi.Void> dataPtr = ffi.nullptr;
@@ -423,6 +465,7 @@ class OrtValueTensor extends OrtValue {
         throw Exception('Invalid inputTensor element type.');
       }
 
+      _validatePreviouslyAcceptedShape(selectedShape, dataSize, strings: false);
       final shapeSize = selectedShape.length;
       final shapePtr = arena<ffi.Int64>(shapeSize);
       shapePtr.asTypedList(shapeSize).setRange(0, shapeSize, selectedShape);

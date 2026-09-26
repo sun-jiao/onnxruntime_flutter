@@ -112,6 +112,16 @@ void main() {
     expect(allocator.live, isEmpty);
   });
 
+  test('rejecting extra numeric elements releases the allocated buffer', () {
+    final allocator = _TrackedAllocator();
+    expect(
+        () => allocator.run(() => OrtValueTensor.createTensorWithDataList(
+            Float32List.fromList([1, 2]), [1])),
+        throwsArgumentError);
+    expect(allocator.allocations, greaterThan(0));
+    expect(allocator.live, isEmpty);
+  });
+
   test('shape mismatch releases numeric tensor data', () {
     final allocator = _TrackedAllocator();
     expect(
