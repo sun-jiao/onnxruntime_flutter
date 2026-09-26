@@ -15,6 +15,7 @@ import 'package:onnxruntime/src/ort_provider.dart';
 import 'package:onnxruntime/src/providers/ort_flags.dart';
 import 'package:onnxruntime/src/util/native_path.dart';
 import 'package:onnxruntime/src/util/native_memory.dart';
+import 'package:onnxruntime/src/util/model_metadata.dart';
 
 class OrtSession {
   bool _released = false;
@@ -279,31 +280,8 @@ class OrtSession {
     if (_released) {
       throw StateError('The session has been released.');
     }
-    final metaPtr = calloc<ffi.Pointer<bg.OrtModelMetadata>>();
-    var statusPtr = OrtEnv.instance.ortApiPtr.ref.SessionGetModelMetadata
-            .asFunction<
-                bg.OrtStatusPtr Function(ffi.Pointer<bg.OrtSession>,
-                    ffi.Pointer<ffi.Pointer<bg.OrtModelMetadata>>)>()(
-        _ptr, metaPtr);
-    OrtStatus.checkOrtStatus(statusPtr);
-    final meta = metaPtr.value;
-    final namePtrPtr = calloc<ffi.Pointer<ffi.Char>>();
-    statusPtr = OrtEnv
-            .instance.ortApiPtr.ref.ModelMetadataLookupCustomMetadataMap
-            .asFunction<
-                bg.OrtStatusPtr Function(
-                    ffi.Pointer<bg.OrtModelMetadata> model_metadata,
-                    ffi.Pointer<bg.OrtAllocator> allocator,
-                    ffi.Pointer<ffi.Char> key,
-                    ffi.Pointer<ffi.Pointer<ffi.Char>> value)>()(
-        meta,
-        OrtAllocator.instance.ptr,
-        key.toNativeUtf8().cast<ffi.Char>(),
-        namePtrPtr);
-    final name = namePtrPtr.value.cast<Utf8>().toDartString();
-    calloc.free(metaPtr);
-    calloc.free(namePtrPtr);
-    return name;
+    return readModelMetadata(
+        OrtEnv.instance.ortApiPtr, _ptr, OrtAllocator.instance.ptr, key);
   }
 
   /// Stops accepting runs and releases this session once any worker has exited.

@@ -44,13 +44,15 @@ def node(op, inputs, output, attributes=b'', domain=''):
             + (message(7, domain) if domain else b''))
 
 
-def model(name, nodes, outputs, ml=False):
+def model(name, nodes, outputs, ml=False, metadata=()):
     graph = (b''.join(message(1, n) for n in nodes) + message(2, name)
              + message(11, value_info('input', tensor_type([1, 2])))
              + b''.join(message(12, value_info(n, t)) for n, t in outputs))
     result = integer(1, 8) + message(7, graph) + message(8, integer(2, 13))
     if ml:
         result += message(8, message(1, 'ai.onnx.ml') + integer(2, 1))
+    for key, value in metadata:
+        result += message(14, message(1, key) + message(2, value))
     Path(__file__).with_name(name + '.onnx').write_bytes(result)
 
 
@@ -67,3 +69,9 @@ map_type = message(5, integer(1, 7) + message(2, tensor_type([])))
 model('map_sequence', [
     node('ZipMap', ['input'], 'maps', message(5, labels), 'ai.onnx.ml'),
 ], [('maps', sequence_type(map_type))], ml=True)
+
+model('metadata', [node('Identity', ['input'], 'output')],
+      [('output', tensor_type([1, 2]))], metadata=[
+          ('author', 'onnxruntime_flutter'), ('empty', ''),
+          ('说明🧠', '中文元数据🧠'), ('nul', 'prefix\0suffix'),
+      ])
