@@ -97,3 +97,10 @@ See the [upstream QNN documentation](https://onnxruntime.ai/docs/execution-provi
 Android currently uses ORT 1.23.2; the other platforms use 1.15.1. The Dart wrapper
 uses C API 14. Model support and numerical results may differ between versions;
 see the [compatibility contract and tests](tool/RUNTIME_COMPATIBILITY.md).
+
+### Regression tests
+
+After `flutter pub get`, run `python3 tool/run_native_tests.py` on a desktop host.
+The runner selects the correct native library for the host architecture.
+See [test coverage and CI](test/README.md) for packaging tests, the native runtime
+matrix, and device-validation limits.

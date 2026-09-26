@@ -90,3 +90,19 @@ an isolated alternate runtime. Packaging tests verify dependency pins and binary
 hashes: `python3 -m unittest discover -s test/packaging -v`.
 See [runtime compatibility](../tool/RUNTIME_COMPATIBILITY.md) for the remaining
 cross-version and device-validation limits.
+
+## Automated runs
+
+`python3 tool/run_native_tests.py` selects the bundled native library for the
+current desktop architecture and returns Flutter's exit status. Install package
+dependencies with `flutter pub get` first. For an isolated alternative library,
+pass both `--runtime-dir` and `--runtime-version`.
+
+The GitHub Actions workflow runs on pushes and pull requests: native tests on
+Linux x64/ARM64, Windows x64 and macOS ARM64, plus Linux x64 with ORT 1.23.2.
+The latter checks the Android runtime version on a host; it is not an Android
+device test. A Linux packaging job verifies all desktop artifact headers, CMake
+selection, version hashes, runner failure propagation and fixture reproducibility.
+Windows ARM64 and mobile device inference still need target-device validation.
+Analysis treats errors and warnings as failures while retaining existing info
+level documentation lints. CI does not publish packages or modify native pins.

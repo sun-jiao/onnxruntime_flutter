@@ -1,0 +1,77 @@
+name: Native regression tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packaging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test build selection, binary versions and test runner
+        run: python -m unittest discover -s test/packaging -v
+      - name: Check reproducible model fixtures
+        run: |
+          python test/fixtures/generate_complex_outputs.py
+          git diff --exit-code -- test/fixtures
+
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            runtime: bundled
+          - os: ubuntu-24.04-arm
+            runtime: bundled
+          - os: windows-2022
+            runtime: bundled
+          - os: macos-15
+            runtime: bundled
+          - os: ubuntu-24.04
+            runtime: '1.23.2'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux engine dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Analyze library and tests
+        run: flutter analyze --no-fatal-infos lib test
+      - name: Test bundled runtime
+        if: matrix.runtime == 'bundled'
+        run: python tool/run_native_tests.py
+      - name: Test Android runtime version on Linux host
+        if: matrix.runtime == '1.23.2'
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/onnxruntime-linux-x64-1.23.2.tgz"
+          curl --fail --location --retry 3 \
+            https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-linux-x64-1.23.2.tgz \
+            --output "$archive"
+          echo "1fa4dcaef22f6f7d5cd81b28c2800414350c10116f5fdd46a2160082551c5f9b  $archive" | sha256sum --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          runtime_dir="$RUNNER_TEMP/onnxruntime-linux-x64-1.23.2/lib"
+          ln -s libonnxruntime.so.1.23.2 "$runtime_dir/libonnxruntime.so.1.15.1"
+          python tool/run_native_tests.py --runtime-dir "$runtime_dir" --runtime-version 1.23.2
