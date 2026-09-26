@@ -10,9 +10,12 @@ Flutter plugin for OnnxRuntime via `dart:ffi` provides an easy, flexible, and fa
 | **Platform**      | Android       | iOS | Linux | macOS | Windows |
 |-------------------|---------------|-----|-------|-------|---------|
 | **Compatibility** | API level 21+ | *   | *     | *     | *       |
-| **Architecture**  | arm32/arm64   | *   | *     | *     | *       |
+| **Architecture**  | arm32/arm64   | *   | x64/arm64 | * | x64/arm64 |
 
 *: [Consistent with Flutter](https://docs.flutter.dev/reference/supported-platforms)
+
+Desktop builds select the native library for the target architecture. See
+[desktop packaging](cmake/README.md) for binary provenance and validation.
 
 ## Key Features
 

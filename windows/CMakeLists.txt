@@ -8,14 +8,15 @@ cmake_minimum_required(VERSION 3.14)
 set(PROJECT_NAME "onnxruntime")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
-# Invoke the build for native code shared with the other target platforms.
-# This can be changed to accommodate different builds.
-# add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../src" "${CMAKE_CURRENT_BINARY_DIR}/shared")
+# Select the target architecture rather than the build host architecture.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/onnxruntime_arch.cmake")
+onnxruntime_target_arch(windows ORT_TARGET_ARCH)
+set(ORT_LIBRARY_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+if(ORT_TARGET_ARCH STREQUAL "arm64")
+  set(ORT_LIBRARY_DIR "${ORT_LIBRARY_DIR}/arm64")
+endif()
 
-# List of absolute paths to libraries that should be bundled with the plugin.
-# This list could contain prebuilt libraries, or libraries created by an
-# external build triggered from this build file.
 set(onnxruntime_bundled_libraries
-  "${CMAKE_CURRENT_SOURCE_DIR}/onnxruntime.dll"
+  "${ORT_LIBRARY_DIR}/onnxruntime.dll"
   PARENT_SCOPE
 )
