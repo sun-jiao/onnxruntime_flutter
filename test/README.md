@@ -82,3 +82,11 @@ native provider/backend names, unsupported-runtime fallback, error propagation,
 and temporary allocation cleanup. They also preserve XNNPACK option forwarding.
 Actual QNN acceleration requires a QNN-enabled runtime, matching Qualcomm backend
 libraries, and supported hardware; the fixture does not claim hardware coverage.
+
+Runtime compatibility tests assert the loaded native version and C API contract,
+and compare synchronous/asynchronous inference to fixed expected values using a
+common IR 8 / opset 13 model. `ORT_TEST_VERSION` allows the same suite to validate
+an isolated alternate runtime. Packaging tests verify dependency pins and binary
+hashes: `python3 -m unittest discover -s test/packaging -v`.
+See [runtime compatibility](../tool/RUNTIME_COMPATIBILITY.md) for the remaining
+cross-version and device-validation limits.

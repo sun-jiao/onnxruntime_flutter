@@ -57,11 +57,15 @@ void main() {
   test('native inference errors preserve exceptions and free temporary names',
       () {
     final allocator = _TrackedAllocator();
+    // The wrapper preserves native messages, which differ across pinned ORTs.
+    final message = OrtEnv.version == '1.15.1'
+        ? 'Invalid Feed Input Name'
+        : 'Invalid input name: missing';
     for (var i = 0; i < 5; i++) {
       expect(
         () => allocator.run(() => session.run(runOptions, {'missing': input})),
-        throwsA(isA<Exception>().having((error) => error.toString(), 'message',
-            contains('Invalid Feed Input Name'))),
+        throwsA(isA<Exception>()
+            .having((error) => error.toString(), 'message', contains(message))),
       );
       expect(allocator.live, isEmpty);
     }

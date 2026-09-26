@@ -1,0 +1,17 @@
+{
+  "c_api_version": 14,
+  "platforms": {
+    "android": "1.23.2",
+    "ios": "1.15.1",
+    "linux": "1.15.1",
+    "macos": "1.15.1",
+    "windows": "1.15.1"
+  },
+  "bundled_libraries": {
+    "linux/libonnxruntime.so.1.15.1": "6ce2845caacb638ed78bb23bbadbb4748f962c409a6748b402dc1223ba307b28",
+    "linux/arm64/libonnxruntime.so.1.15.1": "5c6de97d2a2dbdd706c3f312d41e909b063ceb3284856174eb4f645d4cca9f88",
+    "windows/onnxruntime.dll": "bb090dd258282c1d7f7a41a83492ba07bc4fe65d75259435587350e1fa66f1bc",
+    "windows/arm64/onnxruntime.dll": "ab84e76a41fc404b98e55b1d394f83b9c932f49bf65395b56a1cdf5862713e7e",
+    "macos/libonnxruntime.1.15.1.dylib": "c0a7154f9b9df90ad8a9b4a63f45fc7ad26cbc9238241c9faaa53a32092d8264"
+  }
+}

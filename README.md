@@ -91,3 +91,9 @@ Install the matching Qualcomm backend and its dependencies on the native library
 search path. Native registration errors propagate as for the other providers.
 The bundled CPU runtimes do not acquire QNN support merely by calling this method.
 See the [upstream QNN documentation](https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html).
+
+### Native runtime versions
+
+Android currently uses ORT 1.23.2; the other platforms use 1.15.1. The Dart wrapper
+uses C API 14. Model support and numerical results may differ between versions;
+see the [compatibility contract and tests](tool/RUNTIME_COMPATIBILITY.md).
