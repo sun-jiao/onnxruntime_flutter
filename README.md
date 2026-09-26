@@ -262,3 +262,19 @@ Scalars return a one-element typed list; empty tensors return an empty typed
 list. Each call owns a separate buffer and may be modified independently.
 Calling after tensor release throws `StateError`. The existing `value` getter
 retains its scalar/nested-list representation and behavior.
+
+### Resource scopes and awaitable shutdown
+
+`await session.closeAsync()` stops accepting runs and waits for accepted runs
+and runtime destruction. It is idempotent and also works after `release()`;
+the existing void `release()` contract is unchanged. `usingSession(session,
+(session) async { ... })` always awaits shutdown, including on callback failure.
+
+`usingOrtScope((scope) async { ... })` supports `scope.own(resource,
+(resource) => resource.release())` and `scope.defer(session.closeAsync)`.
+Disposers run in reverse order and every disposer is attempted. Register input
+values/options before sessions so sessions drain before those resources free.
+Await work inside the scope; returned output values must not be registered if
+they need to outlive it. Cleanup errors are aggregated in `OrtScopeException`;
+a callback error takes precedence, with cleanup errors retained on
+`scope.disposalErrors`.

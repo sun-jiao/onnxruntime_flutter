@@ -4,6 +4,7 @@ library;
 import '../model_info_checks.dart';
 import '../strict_async_checks.dart';
 import '../typed_data_checks.dart';
+import '../lifecycle_checks.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
@@ -85,6 +86,13 @@ void main() {
     final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
     options.release();
     await checkTypedInference(session);
+  });
+
+  test('awaitable close drains accepted browser work', () async {
+    final options = OrtSessionOptions();
+    final session = OrtSession.fromBuffer(await _model('metadata.onnx'), options);
+    options.release();
+    await checkClose(session);
   });
 
   test('runtime, providers, options and unsupported native operations', () {

@@ -2,6 +2,7 @@ part of 'ort_web.dart';
 
 class OrtSession {
   bool _released = false;
+  Future<void>? _closeFuture;
   Uint8List? _model;
   late final ModelInfo _info;
   late final JSObject _options;
@@ -208,17 +209,22 @@ class OrtSession {
     return value.split('\u0000').first;
   }
 
+  /// Waits for accepted runs and runtime session disposal.
+  Future<void> closeAsync() {
+    release();
+    return _closeFuture!;
+  }
+
   void release() {
     if (_released) return;
     _released = true;
-    _tail
-        .then((_) async {
+    _closeFuture = _tail.then((_) async {
           _model = null;
           final session = _session;
           _session = null;
           if (session != null) await session.release().toDart;
-        })
-        .catchError((Object error) {
+        });
+    _closeFuture!.catchError((Object error) {
           debugPrint('ONNX Runtime Web release failed: $error');
         });
   }

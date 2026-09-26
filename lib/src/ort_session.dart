@@ -22,6 +22,7 @@ import 'package:onnxruntime/src/util/execution_provider.dart';
 
 class OrtSession {
   bool _released = false;
+  Future<void>? _closeFuture;
   late ffi.Pointer<bg.OrtSession> _ptr;
 
   late int _inputCount;
@@ -370,10 +371,17 @@ class OrtSession {
     _isolateSession = null;
     if (isolateSession == null) {
       _releaseNative();
+      _closeFuture = Future.value();
     } else {
       // Keep the void API while deferring destruction until the worker exits.
-      isolateSession.release().then((_) => _releaseNative());
+      _closeFuture = isolateSession.release().then((_) => _releaseNative());
     }
+  }
+
+  /// Stops new runs and waits for accepted work and native destruction.
+  Future<void> closeAsync() {
+    release();
+    return _closeFuture!;
   }
 
   void _releaseNative() {

@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Add resource scopes, usingSession and awaitable session shutdown.
+
 - Add independently owned flat numeric tensor copies through toTypedData on native and Web, preserving legacy value extraction.
 
 - Add runAsyncOrThrow and structured asynchronous inference diagnostics without changing legacy empty-list failures.
