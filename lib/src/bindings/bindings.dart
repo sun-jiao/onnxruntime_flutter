@@ -3,6 +3,15 @@ import 'dart:io';
 import 'package:onnxruntime/src/bindings/onnxruntime_bindings_generated.dart';
 
 final DynamicLibrary _dylib = () {
+  // The native test runner pins the exact library, including in worker isolates.
+  // In particular, Windows may find a system DLL before directories on PATH.
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    final testLibrary = Platform.environment['ORT_TEST_LIBRARY_PATH'];
+    if (testLibrary != null && testLibrary.isNotEmpty) {
+      return DynamicLibrary.open(testLibrary);
+    }
+  }
+
   if (Platform.isAndroid) {
     return DynamicLibrary.open('libonnxruntime.so');
   }

@@ -87,9 +87,16 @@ cross-version and device-validation limits.
 current desktop architecture and returns Flutter's exit status. Install package
 dependencies with `flutter pub get` first. For an isolated alternative library,
 pass both `--runtime-dir` and `--runtime-version`.
+The runner sets `ORT_TEST_LIBRARY_PATH` to the selected library's absolute path.
+Desktop bindings honor this test override in the main and worker isolates, so a
+system copy of `onnxruntime.dll` cannot take precedence through DLL search order.
+An invalid override fails to load instead of falling back to another runtime.
 
 The GitHub Actions workflow runs on pushes and pull requests: native tests on
 Linux x64/ARM64, Windows x64 and macOS ARM64, plus Linux x64 with ORT 1.23.2 (the macOS runtime version).
+Linux ARM64 installs the pinned Flutter Git tag using flutter-action's `master`
+installation mode because the release archive lookup has no matching ARM64 SDK;
+it does not follow the latest master revision.
 The latter checks the macOS runtime version on a Linux host; it does not exercise
 CoreML or Apple libraries. A Linux packaging job verifies CMake target selection,
 download checksums/cache repair, local CocoaPods preparation, manifest consistency,

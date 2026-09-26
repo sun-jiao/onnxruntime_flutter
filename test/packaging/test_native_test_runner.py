@@ -37,12 +37,18 @@ class NativeTestRunnerTest(unittest.TestCase):
         ]:
             with self.subTest(system=system, machine=machine):
                 original = {variable: 'existing', 'UNRELATED': 'kept',
-                            'ORT_TEST_VERSION': 'stale'}
+                            'ORT_TEST_VERSION': 'stale',
+                            'ORT_TEST_LIBRARY_PATH': 'stale-library'}
                 env = RUNNER.test_environment(system, machine, self.root, original)
                 self.assertEqual(env[variable], str(self.root / folder) + separator + 'existing')
                 self.assertEqual(env['UNRELATED'], 'kept')
                 self.assertNotIn('ORT_TEST_VERSION', env)
                 self.assertEqual(original[variable], 'existing')
+                library = pathlib.Path(env['ORT_TEST_LIBRARY_PATH'])
+                self.assertTrue(library.is_absolute())
+                self.assertTrue(library.is_file())
+                self.assertEqual(library.parent, (self.root / folder).resolve())
+                self.assertEqual(original['ORT_TEST_LIBRARY_PATH'], 'stale-library')
 
     def test_alternate_runtime_is_explicit_and_missing_library_fails(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -54,6 +60,19 @@ class NativeTestRunnerTest(unittest.TestCase):
             env = RUNNER.test_environment('Linux', 'x64', ROOT, {}, temporary, '1.23.2')
             self.assertEqual(env['ORT_TEST_VERSION'], '1.23.2')
             self.assertEqual(env['LD_LIBRARY_PATH'], str(pathlib.Path(temporary).resolve()))
+            self.assertEqual(env['ORT_TEST_LIBRARY_PATH'],
+                             str((pathlib.Path(temporary) / 'libonnxruntime.so.1.30.0').resolve()))
+
+    def test_windows_download_path_with_spaces_overrides_system_dll_search(self):
+        directory = self.root / 'download cache' / 'windows-x64'
+        directory.mkdir(parents=True)
+        library = directory / 'onnxruntime.dll'
+        library.touch()
+        env = RUNNER.test_environment('Windows', 'AMD64', self.root,
+                                      {'PATH': r'C:\Windows\System32'},
+                                      downloaded_dir=directory)
+        self.assertEqual(env['ORT_TEST_LIBRARY_PATH'], str(library.resolve()))
+
 
     def test_unknown_architecture_never_silently_uses_x64(self):
         with self.assertRaises(ValueError):

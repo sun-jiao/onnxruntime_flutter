@@ -44,6 +44,9 @@ def test_environment(system, machine, root, environment, runtime_dir=None,
     env.pop('ORT_TEST_VERSION', None)
     if runtime_version:
         env['ORT_TEST_VERSION'] = runtime_version
+    # PATH is searched after system directories on Windows, which can contain
+    # an older onnxruntime.dll. Bindings must open the selected file directly.
+    env['ORT_TEST_LIBRARY_PATH'] = str((directory / filename).resolve())
     env[key] = str(directory) + (separator + env[key] if env.get(key) else '')
     return env
 
