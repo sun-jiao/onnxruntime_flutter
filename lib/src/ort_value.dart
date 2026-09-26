@@ -404,7 +404,9 @@ class OrtValueTensor extends OrtValue {
         dataPtr = ptr.cast();
         dataByteCount = dataSize;
       } else if (element is String) {
-        return _createTensorWithStringList(data.cast<String>(), selectedShape);
+        // Keep non-string leaves so the cast still rejects mixed element types.
+        return _createTensorWithStringList(
+            data.flatten<dynamic>().cast<String>(), selectedShape);
       } else {
         throw Exception('Invalid inputTensor element type.');
       }

@@ -224,14 +224,14 @@ void main() {
     expect(allocator.live, isEmpty);
   });
 
-  test('nested string input keeps its existing type error without leaking', () {
+  test('mixed nested string input throws a type error without leaking', () {
     final allocator = _TrackedAllocator();
     expect(
         () => allocator.run(() => OrtValueTensor.createTensorWithDataList([
-              ['first']
+              ['first', 1]
             ], [
               1,
-              1
+              2
             ])),
         throwsA(isA<TypeError>()));
     expect(allocator.live, isEmpty);
